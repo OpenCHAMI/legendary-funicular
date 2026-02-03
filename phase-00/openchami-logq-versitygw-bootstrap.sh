@@ -104,7 +104,7 @@ vgw_admin() {
 # # ------------------------------------------------------------------------------
 # # Configure root AWS profile for bucket operations
 # # ------------------------------------------------------------------------------
-# ROOT_PROFILE="vgw-root"
+ROOT_PROFILE="vgw-root"
 #
 # mkdir -p /root/.aws
 # chmod 700 /root/.aws
