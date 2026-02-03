@@ -93,6 +93,13 @@ vgw_admin() {
 		"$@"
 }
 
+# ------------------------------------------------------------------------------
+# Helper to get user access string from the corresponding secrets file
+# ------------------------------------------------------------------------------
+get_user_access() {
+	grep '^VGW_ACCESS_KEY=' "${USERS_DIR}/${1}.env" | cut -d= -f2
+}
+
 # todo: this is already done by the `gen-secrets.service` we depend on
 # so we should probably fail non-zero here as it would violate that contract
 # # Ensure dir exists
@@ -204,16 +211,16 @@ aws --profile "${ROOT_PROFILE}" \
 	--endpoint-url "${GATEWAY_ENDPOINT}" \
 	s3api put-bucket-acl \
 	--bucket "${BUCKET_RAW}" \
-	--grant-write "${USER_LOG_WRITER}" \
-	--grant-read "${USER_LOG_COMPACTOR}"
+	--grant-write "$(get_user_access ${USER_LOG_WRITER})" \
+	--grant-read "$(get_user_access ${USER_LOG_COMPACTOR})"
 
 # DAILY
 aws --profile "${ROOT_PROFILE}" \
 	--endpoint-url "${GATEWAY_ENDPOINT}" \
 	s3api put-bucket-acl \
 	--bucket "${BUCKET_DAILY}" \
-	--grant-write "${USER_LOG_COMPACTOR}" \
-	--grant-read "${USER_LOG_READER}"
+	--grant-write "$(get_user_access ${USER_LOG_COMPACTOR})" \
+	--grant-read "$(get_user_access ${USER_LOG_READER})"
 
 # 7. configure expected bucket level Policies
 
@@ -232,19 +239,19 @@ PATH_WORK=$(mktemp -d)
   "Statement":[
     {
       "Effect":"Allow",
-      "Principal":"${USER_LOG_WRITER}",
+			"Principal":"$(get_user_access ${USER_LOG_WRITER})",
       "Action":["s3:PutObject"],
       "Resource":["arn:aws:s3:::${BUCKET_RAW}/*"]
     },
 		{
       "Effect":"Allow",
-      "Principal":"${USER_LOG_COMPACTOR}",
+			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
       "Action":["s3:GetObject"],
       "Resource":["arn:aws:s3:::${BUCKET_RAW}/*"]
 		},
 		{
       "Effect":"Allow",
-      "Principal":"${USER_LOG_COMPACTOR}",
+			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
       "Action":["s3:ListBucket"],
       "Resource":["arn:aws:s3:::${BUCKET_RAW}"]
 		}
@@ -264,19 +271,19 @@ EOF
   "Statement":[
     {
       "Effect":"Allow",
-      "Principal":"${USER_LOG_COMPACTOR}",
+			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
       "Action":["s3:PutObject"],
       "Resource":["arn:aws:s3:::${BUCKET_DAILY}/*"]
     },
 		{
       "Effect":"Allow",
-      "Principal":"${USER_LOG_READER}",
+			"Principal":"$(get_user_access ${USER_LOG_READER})",
       "Action":["s3:GetObject"],
       "Resource":["arn:aws:s3:::${BUCKET_DAILY}/*"]
 		},
 		{
       "Effect":"Allow",
-      "Principal":"${USER_LOG_READER}",
+			"Principal":"$(get_user_access ${USER_LOG_READER})",
       "Action":["s3:ListBucket"],
       "Resource":["arn:aws:s3:::${BUCKET_DAILY}"]
 		}
