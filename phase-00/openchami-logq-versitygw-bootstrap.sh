@@ -187,7 +187,7 @@ for bucket in "${BUCKETS[@]}"; do
 	echo "  assigning bucket owner"
 	vgw_admin change-bucket-owner \
 		--bucket "${bucket}" \
-		--owner "${access}"
+		--owner "${ROOT_ACCESS}"
 
 	# 5. idempotency: ensure bucket owner type => prefer owner
 	# with versitygw (and modern aws), this is required to enable use of both
