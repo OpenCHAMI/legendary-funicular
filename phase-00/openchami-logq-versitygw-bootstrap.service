@@ -1,0 +1,32 @@
+# todo: remove these comments later on after creating documentation and the
+# relevant RPM(s) for installation
+# blatant re-use of the bootstrap users unit file from the quadlet repo
+[Unit]
+Description=Bootstrap VersityGW for OpenCHAMI LogQ
+
+# does not depend on the original boots
+# depends only on the running containerized s3 gateway and the generate secrets
+# service
+# - gateway dependency -> obvious
+# - gen secrets dependency -> ensures root login
+#
+# The original bootstrap service, which we adapt in our own script, merely
+# creates additional IAM user accounts for the gateway and thus is not
+# necessary.
+Requires=versitygw.service versitygw-gensecrets.service
+After=versitygw.service versitygw-gensecrets.service
+After=network-online.target
+
+[Service]
+Type=oneshot
+
+# this environment file is created by the gen-secrets.service oneshot that we
+# already depend on. it's needed to ensure idempotent creation of the logq S3
+# IAM users
+EnvironmentFile=/etc/versitygw/secrets.env
+Environment=GATEWAY_ENDPOINT=http://127.0.0.1:7070
+ExecStart=/usr/local/libexec/openchami-logq-versitygw-bootstrap.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
