@@ -196,11 +196,7 @@ for bucket in "${BUCKETS[@]}"; do
 	aws --profile "${ROOT_PROFILE}" \
 		--endpoint-url "${GATEWAY_ENDPOINT}" \
 		s3api put-bucket-ownership-controls --bucket "${bucket}" \
-		--ownership-controls '{
-    "Rules": [
-      { "ObjectOwnership": "BucketOwnerPreferred" }
-    ]
-  }'
+		--ownership-controls '{ "Rules": [ { "ObjectOwnership": "BucketOwnerPreferred" } ] }'
 done
 
 # 6. configure expected bucket level ACLs
@@ -235,26 +231,26 @@ PATH_WORK=$(mktemp -d)
 	# RAW
 	cat <<EOF >"${TEMP_JSON_POLICY}"
 {
-  "Version":"2012-10-17",
-  "Statement":[
+  "Version": "2012-10-17",
+  "Statement": [
     {
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_WRITER})",
-      "Action":["s3:PutObject"],
-      "Resource":["arn:aws:s3:::${BUCKET_RAW}/*"]
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_WRITER})",
+      "Action": ["s3:PutObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}/*"]
     },
-		{
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
-      "Action":["s3:GetObject"],
-      "Resource":["arn:aws:s3:::${BUCKET_RAW}/*"]
-		},
-		{
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
-      "Action":["s3:ListBucket"],
-      "Resource":["arn:aws:s3:::${BUCKET_RAW}"]
-		}
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_COMPACTOR})",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_COMPACTOR})",
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}"]
+    }
   ]
 }
 EOF
@@ -267,26 +263,26 @@ EOF
 	# RAW
 	cat <<EOF >"${TEMP_JSON_POLICY}"
 {
-  "Version":"2012-10-17",
-  "Statement":[
+  "Version": "2012-10-17",
+  "Statement": [
     {
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_COMPACTOR})",
-      "Action":["s3:PutObject"],
-      "Resource":["arn:aws:s3:::${BUCKET_DAILY}/*"]
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_COMPACTOR})",
+      "Action": ["s3:PutObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET_DAILY}/*"]
     },
-		{
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_READER})",
-      "Action":["s3:GetObject"],
-      "Resource":["arn:aws:s3:::${BUCKET_DAILY}/*"]
-		},
-		{
-      "Effect":"Allow",
-			"Principal":"$(get_user_access ${USER_LOG_READER})",
-      "Action":["s3:ListBucket"],
-      "Resource":["arn:aws:s3:::${BUCKET_DAILY}"]
-		}
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_READER})",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET_DAILY}/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_READER})",
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::${BUCKET_DAILY}"]
+    }
   ]
 }
 EOF
