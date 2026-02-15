@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+source <(sudo cat /etc/versitygw/secrets.env)
+ENDPOINT="http://127.0.0.1:7070"
+
+sudo podman exec -it versitygw          \
+        versitygw admin                 \
+        --access ${ROOT_ACCESS_KEY}     \
+        --secret ${ROOT_SECRET_KEY}     \
+        --endpoint-url ${ENDPOINT}      \
+        $@
