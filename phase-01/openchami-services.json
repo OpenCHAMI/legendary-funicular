@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "nomatch": "0",
+  "type": "string",
+  "table": [
+    { "index": "acme-deploy", "value": "1" },
+    { "index": "acme-register", "value": "1" },
+    { "index": "bss-init", "value": "1" },
+    { "index": "bss", "value": "1" },
+    { "index": "cloud-init-server", "value": "1" },
+    { "index": "coresmd-coredhcp", "value": "1" },
+    { "index": "coresmd-coredns", "value": "1" },
+    { "index": "haproxy", "value": "1" },
+    { "index": "hydra-gen-jwks", "value": "1" },
+    { "index": "hydra-migrate", "value": "1" },
+    { "index": "hydra", "value": "1" },
+    { "index": "opaal-idp", "value": "1" },
+    { "index": "opaal", "value": "1" },
+    { "index": "postgres", "value": "1" },
+    { "index": "smd-init", "value": "1" },
+    { "index": "smd", "value": "1" },
+    { "index": "step-ca", "value": "1" },
+    { "index": "versitygw", "value": "1" },
+    { "index": "registry", "value": "1" }
+  ]
+}
