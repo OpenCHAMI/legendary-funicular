@@ -14,11 +14,11 @@ Image=docker.io/timberio/vector:0.53.0-debian
 Environment=VECTOR_LOG=info
 Environment=S3_REGION=us-east-1
 Environment=S3_BUCKET=openchami-logs-raw
-Environment=S3_ENDPOINT=127.0.0.1
+Environment=S3_ENDPOINT=http://127.0.0.1:7070
 EnvironmentFile=/etc/versitygw/users.d/log-writer.env
 
 # Volumes
-Volume=/opt/vector:/opt/vector:Z
+Volume=/opt/vector:/etc/vector:ro
 Volume=/var/lib/vector:/var/lib/vector:Z
 
 # Networking
