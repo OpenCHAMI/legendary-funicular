@@ -142,6 +142,9 @@ for user in "${USERS[@]}"; do
 VGW_USER=${user}
 VGW_ACCESS_KEY=${access}
 VGW_SECRET_KEY=${secret}
+
+S3_ACCESS_KEY=${access}
+S3_SECRET_KEY=${secret}
 EOF
         chmod 600 "${user_file}"
         chown root:root "${user_file}"

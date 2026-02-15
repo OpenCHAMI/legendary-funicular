@@ -1,0 +1,29 @@
+[Unit]
+Description=The OpenCHAMI LogQ Log Writer container for raw log preprocessing
+Wants=openchami-logq-versitygw-bootstrap.service rsyslog.service
+After=openchami-logq-versitygw-bootstrap.service rsyslog.service
+Requires=rsyslog.service
+PartOf=openchami.target
+
+[Container]
+ContainerName=logq-log-writer
+HostName=logq-log-writer
+Image=docker.io/timberio/vector:0.53.0-debian
+
+# Environment Variables
+Environment=VECTOR_LOG=info
+Environment=S3_REGION=us-east-1
+Environment=S3_BUCKET=openchami-logs-raw
+Environment=S3_ENDPOINT=127.0.0.1
+EnvironmentFile=/etc/versitygw/users.d/log-writer.env
+
+# Volumes
+Volume=/opt/vector:/opt/vector:Z
+Volume=/var/lib/vector:/var/lib/vector:Z
+
+# Networking
+Network=host
+PublishPort=1514:1514/udp
+
+[Service]
+Restart=always
