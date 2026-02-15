@@ -211,6 +211,7 @@ aws --profile "${ROOT_PROFILE}" \
     s3api put-bucket-acl \
     --bucket "${BUCKET_RAW}" \
     --grant-write "$(get_user_access ${USER_LOG_WRITER})" \
+    --grant-read "$(get_user_access ${USER_LOG_WRITER})" \
     --grant-read "$(get_user_access ${USER_LOG_COMPACTOR})"
 
 # DAILY
@@ -241,6 +242,12 @@ PATH_WORK=$(mktemp -d)
       "Principal": "$(get_user_access ${USER_LOG_WRITER})",
       "Action": ["s3:PutObject"],
       "Resource": ["arn:aws:s3:::${BUCKET_RAW}/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_WRITER})",
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}"]
     },
     {
       "Effect": "Allow",
