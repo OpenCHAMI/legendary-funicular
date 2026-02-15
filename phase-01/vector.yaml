@@ -4,13 +4,13 @@ sources:
     address: 0.0.0.0:1514
     mode: udp
 sinks:
-  console:
-    inputs:
-      - syslog_udp
-    target: stdout
-    type: console
-    encoding:
-      codec: json
+  # console:
+  #   inputs:
+  #     - syslog_udp
+  #   target: stdout
+  #   type: console
+  #   encoding:
+  #     codec: json
   s3_local:
     inputs:
       - syslog_udp
