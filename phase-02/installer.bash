@@ -8,10 +8,7 @@ if [ ! "$UID" == "0" ]; then
     exit 1
 fi
 
-FILE_RSYSLOGDOTCONF=10-relay-openchami.conf
-FILE_RSYSLOGDLOOKUP=openchami-service-lookup.json
-FILE_QUADLET_WRITER=openchami-logq-log-writer.container
-FILE_VECTOR_CONF=vector-syslog.yaml
+FILE_VECTOR_CONF=vector-cloud-events.yaml
 
 fail-if-missing() {
     if [ ! -f "$1" ]; then
@@ -38,21 +35,12 @@ install-file() {
     )
 }
 
-fail-if-missing ${FILE_RSYSLOGDOTCONF}
-fail-if-missing ${FILE_RSYSLOGDLOOKUP}
-fail-if-missing ${FILE_QUADLET_WRITER}
 fail-if-missing ${FILE_VECTOR_CONF}
-
-install-file ${FILE_RSYSLOGDOTCONF} /etc/rsyslog.d/ 0644
-install-file ${FILE_RSYSLOGDLOOKUP} /etc/rsyslog.d/ 0644
-install-file ${FILE_QUADLET_WRITER} /etc/containers/systemd/ 0644
-
 mkdir -vp /etc/vector.d /var/lib/vector
 install-file ${FILE_VECTOR_CONF} /etc/vector.d 0644
 
 echo "restarting services"
 systemctl daemon-reload
-systemctl restart rsyslog.service
 systemctl restart openchami-logq-log-writer.service
 
 echo "finished successfully"

@@ -1,5 +1,5 @@
 [Unit]
-Description=The OpenCHAMI LogQ Log Writer container for raw log preprocessing
+Description=The OpenCHAMI LogQ Log Writer container for raw log and cloud event preprocessing
 Wants=openchami-logq-versitygw-bootstrap.service rsyslog.service
 After=openchami-logq-versitygw-bootstrap.service rsyslog.service
 Requires=rsyslog.service
@@ -15,10 +15,12 @@ Environment=VECTOR_LOG=info
 Environment=S3_REGION=us-east-1
 Environment=S3_BUCKET=openchami-logs-raw
 Environment=S3_ENDPOINT=http://127.0.0.1:7070
+Environment=VECTOR_CONFIG_DIR=/etc/vector.d
 EnvironmentFile=/etc/versitygw/users.d/log-writer.env
 
 # Volumes
-Volume=/opt/vector:/etc/vector:ro
+# Volume=/opt/vector:/etc/vector:ro
+Volume=/etc/vector.d:/etc/vector.d:ro
 Volume=/var/lib/vector:/var/lib/vector:Z
 
 # Networking
