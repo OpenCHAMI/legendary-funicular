@@ -1,0 +1,34 @@
+type: exclusive_route
+inputs:
+  - logs_preparer
+# target services with potentially parsible message formats (even if intermittent)
+# unspecified services are implicitly tossed into the "_unmatched" route
+routes:
+  - name: "registry"
+    condition:
+      type: vrl
+      source: .appname == "registry"
+  - name: "coresmd_coredns"
+    condition:
+      type: vrl
+      source: .appname == "coresmd-coredns"
+  - name: "coresmd_coredhcp"
+    condition:
+      type: vrl
+      source: .appname == "coresmd-coredhcp"
+  - name: "smd"
+    condition:
+      type: vrl
+      source: .appname == "smd"
+  - name: "hydra"
+    condition:
+      type: vrl
+      source: .appname == "hydra"
+  - name: "opaal"
+    condition:
+      type: vrl
+      source: .appname == "opaal"
+  - name: "step_ca"
+    condition:
+      type: vrl
+      source: .appname == "step-ca"

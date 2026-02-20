@@ -1,0 +1,15 @@
+type: remap
+inputs:
+  - logs_exclusiverouter.registry
+  - logs_exclusiverouter.coresmd_coredns
+  - logs_exclusiverouter.coresmd_coredhcp
+  - logs_exclusiverouter.smd
+  - logs_exclusiverouter.hydra
+  - logs_exclusiverouter.step_ca
+source: |-
+  if .message != "" {
+    result, .parse_error = parse_logfmt(string!(.message))
+    if .parse_error == null {
+      .data = result
+    }
+  }

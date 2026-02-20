@@ -1,0 +1,12 @@
+type: remap
+inputs:
+  - logs_exclusiverouter.opaal
+source: |-
+  if .message != "" {
+    result, error = parse_json(string!(.message))
+    if error == null {
+      .data = result
+    } else {
+      .parse_error = error
+    }
+  }

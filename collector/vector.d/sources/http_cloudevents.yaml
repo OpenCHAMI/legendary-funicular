@@ -1,0 +1,12 @@
+type: http_server
+address: "0.0.0.0:8910"
+decoding:
+  # raw bytes to enabled defered parsing and ultimately simplify the creation
+  # of a standardized schemaless schema across multiple types of http
+  # payload+header formats.
+  codec: bytes
+# headers often contain additional interesting information. in addition,
+# metadata for a given cloud event transmitted over http can be stored either
+# the headers or payload body.
+headers:
+  - "*"

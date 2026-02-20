@@ -1,0 +1,26 @@
+type: remap
+inputs:
+  - http_cloudevents
+source: |
+  # extract all ce- headers into cloudevent object
+  .cloudevent = {}
+  for_each(.) -> |key, value| {
+    if starts_with(key, "ce-") {
+      # log(key, level: "error", rate_limit_secs: 0)
+      .cloudevent = set!(.cloudevent, [slice!(key, 3)], value)
+      result, err = remove(., [key])
+      if err == null {
+        . = result
+      }
+    }
+  }
+  if .message != "" {
+    body = parse_json!(string!(.message))
+    if exists(body.data) {
+      .cloudevent.data = del(body.data)
+      .cloudevent = merge!(.cloudevent, body)
+    } else {
+      .cloudevent.data = body
+    }
+  }
+  del(.message)

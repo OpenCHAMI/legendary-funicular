@@ -1,0 +1,6 @@
+inputs:
+  - logs_parser
+  - cloudevents_parser
+target: stdout
+type: console
+encoding: {codec: json}

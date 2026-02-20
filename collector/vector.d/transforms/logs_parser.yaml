@@ -1,0 +1,9 @@
+type: remap
+inputs:
+  - logs_sanitizer_json
+  - logs_sanitizer_logfmt
+  - logs_exclusiverouter._unmatched
+
+# conceptually, this node represents the join of fork/join
+source: |
+  # no op

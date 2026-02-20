@@ -1,0 +1,20 @@
+type: remap
+inputs:
+  - syslog_udp_logs
+source: |
+  # prepare for parsing by creating defaults for parse error and parsed data storage
+  # 
+  # prepare all openchami-specific fields with null values
+  # with our current service logs, AFAIK it is not possible to grab these
+  # fields as they aren't attached to anything... so this is future prep
+  .xname = null
+  .component_id = null
+  .node_id = null
+  .request_user = null
+  .request_id = null
+  .trace_id = null
+  .parse_error = null
+  .data = {}
+
+  # remove nuisance ansi sequences...
+  .message = replace!(.message, r'(\x1b|\#033)\[[0-?]*[ -/]*[@-~]', "")

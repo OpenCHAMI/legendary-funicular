@@ -74,8 +74,18 @@ install-dir() {
 ################################################################################
 
 EXPECTED=(
-    "./deploy/configs/vector.d/vector-cloud-events.yaml"
-    "./deploy/configs/vector.d/vector-syslog.yaml"
+    "./deploy/configs/vector.d/transforms/logs_exclusiverouter.yaml"
+    "./deploy/configs/vector.d/transforms/logs_sanitizer_json.yaml"
+    "./deploy/configs/vector.d/transforms/logs_preparer.yaml"
+    "./deploy/configs/vector.d/transforms/logs_sanitizer_logfmt.yaml"
+    "./deploy/configs/vector.d/transforms/cloudevents_parser.yaml"
+    "./deploy/configs/vector.d/transforms/logs_parser.yaml"
+    "./deploy/configs/vector.d/sources/http_cloudevents.yaml"
+    "./deploy/configs/vector.d/sources/syslog_udp_logs.yaml"
+    "./deploy/configs/vector.d/vector.yaml"
+    "./deploy/configs/vector.d/sinks/stdout.yaml"
+    "./deploy/configs/vector.d/sinks/s3_logs.yaml"
+    "./deploy/configs/vector.d/sinks/s3_events.yaml"
     "./deploy/configs/rsyslog.d/openchami-service-lookup.json"
     "./deploy/configs/rsyslog.d/10-relay-openchami.conf"
     "./deploy/scripts/openchami-logq-versitygw-bootstrap.sh"
@@ -103,8 +113,8 @@ mkdir -vp /var/lib/vector
 echo "restarting dependent services"
 
 systemctl daemon-reload
-systemctl restart openchami-logq-versitygw-bootstrap.service
-systemctl restart rsyslog.service
+# systemctl restart openchami-logq-versitygw-bootstrap.service
+# systemctl restart rsyslog.service
 systemctl restart openchami-logq-log-writer.service
 
 echo "finished successfully"
