@@ -15,18 +15,18 @@ Stack:
 
 ## Development phases (checklist)
 
-- [ ] **Phase 0 - Storage & IAM (current focus)**
+- [x] **Phase 0 - Storage & IAM (current focus)**
   - VersityGW via quadlet
   - Buckets: `openchami-logs-raw`, `openchami-logs-daily`
   - Users: `log-writer`, `log-compactor`, `log-reader`
   - Verify access with awscli
 
-- [ ] **Phase 1 - Syslog -> Raw NDJSON**
+- [x] **Phase 1 - Syslog -> Raw NDJSON**
   - Vector or fluent-bit
-  - Syslog in -> hourly NDJSON in S3
+  - Syslog in -> hourly NDJSON in S3 **changed: hourly -> minutely to ensure proper disk caching**
   - Never drop logs; schema changes must not break ingestion
 
-- [ ] **Phase 2 - CloudEvents -> Raw NDJSON**
+- [x] **Phase 2 - CloudEvents -> Raw NDJSON**
   - Accept CloudEvents
   - Store alongside logs, payload preserved
 
