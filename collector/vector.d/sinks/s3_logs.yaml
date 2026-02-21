@@ -9,7 +9,7 @@ auth:
   secret_access_key: "${S3_SECRET_KEY:?}"
 compression: zstd
 filename_extension: "ndjson.zst"
-key_prefix: "events/date=%F/hour=%H/"
+key_prefix: "logs/date=%F/hour=%H/"
 buffer:
   - type: disk
     max_size: 268435488 # 256MiB.
