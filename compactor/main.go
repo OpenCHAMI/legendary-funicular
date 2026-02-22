@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	//"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -60,13 +60,14 @@ func main() {
 				break // uh oh
 			}
 			s, _ := syslog.Parse(bytes)
-			dumb, _ := json.MarshalIndent(s, "", "  ")
-			fmt.Println(string(dumb))
+			// dumb, _ := json.MarshalIndent(s, "", "  ")
+			// fmt.Println(string(dumb))
 			records = append(records, s)
 		}
 		writer.Write(records)
 		// io.Copy(os.Stdout, pipe)
 		pipe.Close()
+		slog.Info(fmt.Sprintf("successful compaction of: %s", *val.Key))
 	}
 	writer.Close()
 	f.Close()
