@@ -8,7 +8,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type Bucket struct {
@@ -35,15 +34,17 @@ func (b *Bucket) buildObjectPaginator(prefix string) *s3.ListObjectsV2Paginator 
 	return s3.NewListObjectsV2Paginator(b.s3, args)
 }
 
-func (b *Bucket) List(ctx context.Context, prefix string) ([]types.Object, error) {
-	var objects []types.Object
+func (b *Bucket) List(ctx context.Context, prefix string) ([]string, error) {
+	var objects []string
 	objectPaginator := b.buildObjectPaginator(prefix)
 	for objectPaginator.HasMorePages() {
 		output, err := objectPaginator.NextPage(ctx)
 		if err != nil {
 			return nil, err
 		}
-		objects = append(objects, output.Contents...)
+		for _, o := range output.Contents {
+			objects = append(objects, *o.Key)
+		}
 	}
 	return objects, nil
 }
