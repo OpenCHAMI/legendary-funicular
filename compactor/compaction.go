@@ -20,8 +20,12 @@ func compaction[T record.Record](
 	var err error
 	var keySink []string
 	keySrc, err := source.List(ctx, prefix)
-	if err != nil || len(keySrc) == 0 {
+	if err != nil {
 		return err
+	}
+	if len(keySrc) == 0 {
+		slog.Debug(fmt.Sprintf("nothing to do for prefix '%s'", prefix))
+		return nil
 	}
 
 	var wg sync.WaitGroup
