@@ -2,8 +2,9 @@
 package zio
 
 import (
-	"github.com/klauspost/compress/zstd"
 	"io"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 type UnzstdStream struct {
