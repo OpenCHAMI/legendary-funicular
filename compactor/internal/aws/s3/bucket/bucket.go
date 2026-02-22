@@ -26,16 +26,17 @@ func New(cfg aws.Config, region string, endpoint, bucketName string) Bucket {
 	}
 }
 
-func (b *Bucket) buildObjectPaginator() *s3.ListObjectsV2Paginator {
-	return s3.NewListObjectsV2Paginator(
-		b.s3,
-		&s3.ListObjectsV2Input{Bucket: aws.String(b.Name)},
-	)
+func (b *Bucket) buildObjectPaginator(prefix string) *s3.ListObjectsV2Paginator {
+	args := &s3.ListObjectsV2Input{Bucket: aws.String(b.Name)}
+	if prefix != "" {
+		args.Prefix = aws.String(prefix)
+	}
+	return s3.NewListObjectsV2Paginator(b.s3, args)
 }
 
-func (b *Bucket) List(ctx context.Context) ([]types.Object, error) {
+func (b *Bucket) List(ctx context.Context, prefix string) ([]types.Object, error) {
 	var objects []types.Object
-	objectPaginator := b.buildObjectPaginator()
+	objectPaginator := b.buildObjectPaginator(prefix)
 	for objectPaginator.HasMorePages() {
 		output, err := objectPaginator.NextPage(ctx)
 		if err != nil {

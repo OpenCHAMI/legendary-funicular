@@ -32,7 +32,8 @@ func main() {
 	source := buildBucket(ctx, util.GetRequiredEnv("S3_BUCKET_READ"))
 	sink := buildBucket(ctx, util.GetRequiredEnv("S3_BUCKET_WRITE"))
 
-	objects, err := source.List(ctx)
+	// objects, err := source.List(ctx, "")
+	objects, err := source.List(ctx, "events")
 	if err != nil {
 		slog.Error(fmt.Sprintf("failed to list objects for bucket '%s'\n%s", source.Name, err))
 		os.Exit(1)
@@ -45,7 +46,7 @@ func main() {
 	defer wg.Wait()
 	pr, pw := io.Pipe()
 	wg.Go(func() {
-		spool, err := os.CreateTemp("", "")
+		spool, err := os.CreateTemp("", "spool-*")
 		if err != nil {
 			slog.Error(fmt.Sprint(err))
 			os.Exit(1)
