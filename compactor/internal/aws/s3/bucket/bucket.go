@@ -3,15 +3,16 @@ package bucket
 
 import (
 	"context"
+	"io"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"io"
 )
 
 type Bucket struct {
 	s3   *s3.Client
-	name string
+	Name string
 }
 
 func New(cfg aws.Config, region string, endpoint, bucketName string) Bucket {
@@ -21,21 +22,20 @@ func New(cfg aws.Config, region string, endpoint, bucketName string) Bucket {
 			o.Region = region
 			o.BaseEndpoint = aws.String(endpoint)
 		}),
-		name: bucketName,
+		Name: bucketName,
 	}
 }
 
 func (b *Bucket) buildObjectPaginator() *s3.ListObjectsV2Paginator {
 	return s3.NewListObjectsV2Paginator(
 		b.s3,
-		&s3.ListObjectsV2Input{Bucket: aws.String(b.name)},
+		&s3.ListObjectsV2Input{Bucket: aws.String(b.Name)},
 	)
 }
 
 func (b *Bucket) List(ctx context.Context) ([]types.Object, error) {
 	var objects []types.Object
 	objectPaginator := b.buildObjectPaginator()
-
 	for objectPaginator.HasMorePages() {
 		output, err := objectPaginator.NextPage(ctx)
 		if err != nil {
@@ -51,7 +51,7 @@ func (b *Bucket) Open(
 	key string,
 ) (io.ReadCloser, error) {
 	if out, err := b.s3.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(b.name),
+		Bucket: aws.String(b.Name),
 		Key:    aws.String(key),
 	}); err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (b *Bucket) Put(
 	stream io.Reader,
 ) error {
 	_, err := b.s3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(b.name),
+		Bucket: aws.String(b.Name),
 		Key:    aws.String(key),
 		Body:   stream,
 	})
@@ -94,9 +94,22 @@ func (b *Bucket) Delete(ctx context.Context, key string) error {
 	_, err := b.s3.DeleteObject(
 		ctx,
 		&s3.DeleteObjectInput{
-			Bucket: aws.String(b.name),
+			Bucket: aws.String(b.Name),
 			Key:    aws.String(key),
 		},
 	)
+	return err
+}
+
+func (b *Bucket) PutLarge(
+	ctx context.Context,
+	key string,
+	stream io.Reader,
+) error {
+	_, err := b.s3.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(b.Name),
+		Key:    aws.String(key),
+		Body:   stream,
+	})
 	return err
 }

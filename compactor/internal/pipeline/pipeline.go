@@ -1,5 +1,5 @@
-// Package iopipe
-package iopipe
+// Package pipeline
+package pipeline
 
 import (
 	"io"
@@ -7,12 +7,12 @@ import (
 )
 
 type TransformR func(i io.Reader) (io.ReadCloser, error)
-type IOPipeReadCloser struct {
+type PipelineReadCloser struct {
 	stages []io.ReadCloser
 }
 
-func NewR(i io.ReadCloser, transforms ...TransformR) (*IOPipeReadCloser, error) {
-	var pipe IOPipeReadCloser
+func NewR(i io.ReadCloser, transforms ...TransformR) (*PipelineReadCloser, error) {
+	var pipe PipelineReadCloser
 	pipe.stages = append(pipe.stages, i)
 	for ix, transform := range transforms {
 		prev := pipe.stages[ix]
@@ -26,24 +26,24 @@ func NewR(i io.ReadCloser, transforms ...TransformR) (*IOPipeReadCloser, error) 
 	return &pipe, nil
 }
 
-func (iop *IOPipeReadCloser) Close() {
+func (iop *PipelineReadCloser) Close() {
 	for _, s := range slices.Backward(iop.stages) {
 		s.Close() // squelch errors... for now
 	}
 	iop.stages = make([]io.ReadCloser, 0)
 }
 
-func (iop IOPipeReadCloser) Read(p []byte) (int, error) {
+func (iop PipelineReadCloser) Read(p []byte) (int, error) {
 	return iop.stages[len(iop.stages)-1].Read(p)
 }
 
 type TransformW func(i io.WriteCloser) (io.WriteCloser, error)
-type IOPipeWriteCloser struct {
+type PipelineWriteCloser struct {
 	stages []io.WriteCloser
 }
 
-func NewW(i io.WriteCloser, transforms ...TransformW) (*IOPipeWriteCloser, error) {
-	var pipe IOPipeWriteCloser
+func NewW(i io.WriteCloser, transforms ...TransformW) (*PipelineWriteCloser, error) {
+	var pipe PipelineWriteCloser
 	pipe.stages = append(pipe.stages, i)
 	for ix, transform := range transforms {
 		prev := pipe.stages[ix]
@@ -57,13 +57,13 @@ func NewW(i io.WriteCloser, transforms ...TransformW) (*IOPipeWriteCloser, error
 	return &pipe, nil
 }
 
-func (iop *IOPipeWriteCloser) Close() {
+func (iop *PipelineWriteCloser) Close() {
 	for _, s := range iop.stages {
 		s.Close() // squelch errors... for now
 	}
 	iop.stages = make([]io.WriteCloser, 0)
 }
 
-func (iop IOPipeWriteCloser) Write(p []byte) (int, error) {
+func (iop PipelineWriteCloser) Write(p []byte) (int, error) {
 	return iop.stages[len(iop.stages)-1].Write(p)
 }
