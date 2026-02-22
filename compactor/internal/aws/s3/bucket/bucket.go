@@ -4,6 +4,7 @@ package bucket
 import (
 	"context"
 	"io"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -78,19 +79,6 @@ func (b *Bucket) Read(
 	return data, nil
 }
 
-func (b *Bucket) Put(
-	ctx context.Context,
-	key string,
-	stream io.Reader,
-) error {
-	_, err := b.s3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(b.Name),
-		Key:    aws.String(key),
-		Body:   stream,
-	})
-	return err
-}
-
 func (b *Bucket) Delete(ctx context.Context, key string) error {
 	_, err := b.s3.DeleteObject(
 		ctx,
@@ -102,15 +90,27 @@ func (b *Bucket) Delete(ctx context.Context, key string) error {
 	return err
 }
 
-func (b *Bucket) PutLarge(
-	ctx context.Context,
-	key string,
-	stream io.Reader,
-) error {
+func (b *Bucket) Put(ctx context.Context, key string, stream io.Reader) error {
 	_, err := b.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(b.Name),
 		Key:    aws.String(key),
 		Body:   stream,
 	})
 	return err
+}
+
+func (b *Bucket) SpooledPut(ctx context.Context, key string, stream io.Reader) (int64, error) {
+	spool, err := os.CreateTemp("", "spool-*")
+	if err != nil {
+		return 0, err
+	}
+	defer spool.Close()
+	defer os.Remove(spool.Name())
+
+	n, err := io.Copy(spool, stream)
+	if err != nil {
+		return n, err
+	}
+	spool.Seek(0, io.SeekStart)
+	return n, b.Put(ctx, key, spool)
 }
