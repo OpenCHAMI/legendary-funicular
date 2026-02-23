@@ -105,6 +105,12 @@ install-dir deploy/configs /etc 0644
 install-dir deploy/systemd/containers /etc/containers/systemd 0644
 install-dir deploy/systemd/system /etc/systemd/system 0644
 install-dir deploy/scripts /usr/local/libexec 0755
+(
+    cd compactor
+    /usr/local/go/bin/go build .
+    mv compactor openchami-logq-compactor
+    install-file ./openchami-logq-compactor /usr/local/libexec 0755
+)
 
 echo "creating service work directories"
 mkdir -vp /var/lib/vector
@@ -114,5 +120,6 @@ systemctl daemon-reload
 systemctl restart openchami-logq-versitygw-bootstrap.service
 systemctl restart rsyslog.service
 systemctl restart openchami-logq-log-writer.service
+systemctl restart openchami-logq-compaction.timer
 
 echo "finished successfully"
