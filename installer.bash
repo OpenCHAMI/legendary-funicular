@@ -91,30 +91,28 @@ EXPECTED=(
     "./deploy/scripts/openchami-logq-versitygw-bootstrap.sh"
     "./deploy/systemd/containers/openchami-logq-log-writer.container"
     "./deploy/systemd/system/openchami-logq-versitygw-bootstrap.service"
+    "./deploy/systemd/system/openchami-logq-compaction.timer"
+    "./deploy/systemd/system/openchami-logq-compaction.service"
 )
 
 echo "verifying existence of expected files"
-
 for f in "${EXPECTED[@]}"; do
     fail-if-missing $f
 done
 
 echo "installing"
-
 install-dir deploy/configs /etc 0644
 install-dir deploy/systemd/containers /etc/containers/systemd 0644
 install-dir deploy/systemd/system /etc/systemd/system 0644
 install-dir deploy/scripts /usr/local/libexec 0755
 
 echo "creating service work directories"
-
 mkdir -vp /var/lib/vector
 
 echo "restarting dependent services"
-
 systemctl daemon-reload
-# systemctl restart openchami-logq-versitygw-bootstrap.service
-# systemctl restart rsyslog.service
+systemctl restart openchami-logq-versitygw-bootstrap.service
+systemctl restart rsyslog.service
 systemctl restart openchami-logq-log-writer.service
 
 echo "finished successfully"
