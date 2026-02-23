@@ -16,8 +16,8 @@ func main() {
 		)))
 
 	ctx := context.Background()
-	source := buildBucket(ctx, getRequiredEnv("S3_BUCKET_READ"))
-	sink := buildBucket(ctx, getRequiredEnv("S3_BUCKET_WRITE"))
+	source := buildBucket(ctx, getRequiredEnv("S3_BUCKET_SOURCE"))
+	sink := buildBucket(ctx, getRequiredEnv("S3_BUCKET_SINK"))
 
 	var err error
 	err = compaction(ctx, source, sink, "logs", syslog.Parse)

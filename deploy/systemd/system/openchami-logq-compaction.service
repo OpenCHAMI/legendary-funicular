@@ -1,0 +1,19 @@
+[Unit]
+Description=Compact OpenCHAMI service logs
+
+[Service]
+Type=oneshot
+
+Environment=S3_REGION=us-east-1
+Environment=S3_ENDPOINT=http://127.0.0.1:7070
+Environment=S3_BUCKET_SOURCE=openchami-logs-raw
+Environment=S3_BUCKET_SINK=openchami-logs-daily
+EnvironmentFile=/etc/versitygw/users.d/log-compactor.env
+
+ExecStart=/usr/local/libexec/openchami-logq-compactor
+StandardOutput=journal
+StandardError=journal
+
+
+[Install]
+WantedBy=multi-user.target

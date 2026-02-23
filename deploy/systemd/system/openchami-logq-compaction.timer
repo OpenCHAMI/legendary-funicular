@@ -1,0 +1,10 @@
+[Unit]
+Description=Compact OpenCHAMI service logs daily
+
+[Timer]
+# OnUnitActiveSec=1d
+OnUnitActiveSec=1m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
