@@ -1,10 +1,7 @@
 // Package cloudevent
 package cloudevent
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "encoding/json"
 
 type Event struct {
 	ID          *string         `json:"id" parquet:"id"`
