@@ -3,6 +3,7 @@ Description=Compact OpenCHAMI service logs daily
 
 [Timer]
 OnCalendar=*-*-* 04:00:00
+Persistent=true
 
 [Install]
 WantedBy=timers.target
