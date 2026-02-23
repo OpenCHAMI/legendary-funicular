@@ -30,7 +30,7 @@ Stack:
   - Accept CloudEvents
   - Store alongside logs, payload preserved
 
-- [ ] **Phase 3 - Compaction (DuckDB)**
+- [x] **Phase 3 - Compaction (DuckDB)**
   - Daily job converts NDJSON → Parquet
   - Best-effort field extraction
   - Parquet readable directly from S3
