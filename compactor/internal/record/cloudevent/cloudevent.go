@@ -1,19 +1,26 @@
 // Package cloudevent
 package cloudevent
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Event struct {
+	ID          *string         `json:"id" parquet:"id"`
+	Source      *string         `json:"source" parquet:"source"`
+	Timestamp   *string         `json:"time" parquet:"ts"`
+	SpecVersion *string         `json:"specversion" parquet:"specversion"`
+	Type        *string         `json:"type" parquet:"type"`
+	DataRaw     json.RawMessage `json:"data" parquet:"-"`
+	Data        string          `json:"-" parquet:"data"`
+}
 
 type CloudEvent struct {
-	ID            *string         `json:"id" parquet:"id"`
-	Source        *string         `json:"source" parquet:"source"`
-	Timestamp     *string         `json:"ts" parquet:"ts"`
-	SpecVersion   *string         `json:"spec_version" parquet:"spec_version"`
-	Type          *string         `json:"type" parquet:"type"`
-	CloudEventRaw json.RawMessage `json:"cloudevent" parquet:"-"`
-	CloudEvent    string          `json:"-" parquet:"cloudevent"`
-	Host          *string         `json:"host"`
-	PayloadJSON   string          `json:"-" parquet:"payload_json"`
-	ParseError    *string         `json:"parse_error" parquet:"parse_error"`
+	Host        *string `json:"host" parquet:"host"`
+	ParseError  *string `json:"parse_error" parquet:"parse_error"`
+	PayloadJSON string  `json:"payload_json" parquet:"payload_json"`
+	Event       Event   `json:"cloudevent" parquet:"cloudevent"`
 }
 
 func Parse(b []byte) (CloudEvent, error) {
@@ -21,7 +28,7 @@ func Parse(b []byte) (CloudEvent, error) {
 	err := json.Unmarshal(b, &record)
 	if err == nil {
 		record.PayloadJSON = string(b)
-		record.CloudEvent = string(record.CloudEventRaw)
+		record.Event.Data = string(record.Event.DataRaw)
 	}
 	return record, err
 }
