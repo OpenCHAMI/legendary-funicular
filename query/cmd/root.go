@@ -13,6 +13,7 @@ import (
 )
 
 func NewRootCmd() *cobra.Command {
+	cfg := BuildCfg()
 	var rootCmd = &cobra.Command{
 		Use:   "openchami-logq",
 		Short: "Query OpenCHAMI log lake data",
@@ -21,9 +22,12 @@ DuckDB. It supports ad-hoc SQL queries, predefined reports, and dataset
 inspection using serverless technologies.`,
 	}
 
+	rootCmd.PersistentFlags().StringP("format", "f", "ndjson", "output format (json, ndjson)")
+	rootCmd.PersistentFlags().StringP("output", "o", "", "output file path (default: stdout)")
+
 	rootCmd.AddCommand(
 		dump.NewCmd(),
-		inspect.NewCmd(),
+		inspect.NewCmd(cfg),
 		report.NewCmd(),
 		sql.NewCmd(),
 		version.NewCmd(),

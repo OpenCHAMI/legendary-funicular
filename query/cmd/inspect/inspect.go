@@ -2,13 +2,14 @@
 package inspect
 
 import (
-	"github.com/seantronsen/openchami-logq/query/cmd/inspect/config"
-	"github.com/seantronsen/openchami-logq/query/cmd/inspect/dates"
-	"github.com/seantronsen/openchami-logq/query/cmd/inspect/schema"
+	cmdConfig "github.com/seantronsen/openchami-logq/query/cmd/inspect/config"
+	cmdDates "github.com/seantronsen/openchami-logq/query/cmd/inspect/dates"
+	cmdSchema "github.com/seantronsen/openchami-logq/query/cmd/inspect/schema"
+	"github.com/seantronsen/openchami-logq/query/internal/config"
 	"github.com/spf13/cobra"
 )
 
-func NewCmd() *cobra.Command {
+func NewCmd(cfg *config.Config) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   "inspect",
 		Short: "Inspect dataset metadata",
@@ -17,9 +18,9 @@ available date partitions and schema information.`,
 	}
 
 	cmd.AddCommand(
-		config.NewCmd(),
-		dates.NewCmd(),
-		schema.NewCmd(),
+		cmdConfig.NewCmd(cfg),
+		cmdDates.NewCmd(),
+		cmdSchema.NewCmd(),
 	)
 
 	return cmd

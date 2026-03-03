@@ -64,10 +64,6 @@ func New(opts ...Option) (*Config, error) {
 		return nil, err
 	}
 
-	if cfg.S3KeyAccess == nil || cfg.S3KeySecret == nil {
-		return nil, fmt.Errorf("missing S3 credentials")
-	}
-
 	return cfg, nil
 
 }

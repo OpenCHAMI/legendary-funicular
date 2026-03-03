@@ -2,6 +2,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -9,81 +10,97 @@ import (
 	"github.com/seantronsen/openchami-logq/query/internal/dev"
 )
 
-type Response struct {
-	Message string `json:"message,omitempty"`
-	Code    string `json:"code,omitempty"`
-}
-
-func Render(w io.Writer, f Format, v any) error {
+func validate(v any) error {
 
 	if v == nil {
 		return fmt.Errorf("nil value")
 	}
 
-	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Pointer {
-		if val.IsNil() {
-			return fmt.Errorf("nil pointer")
-		}
-		val = val.Elem()
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
 	}
 
-	switch val.Kind() {
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < val.Len(); i++ {
-			elem := val.Index(i)
-			if err := Render(w, f, elem.Interface()); err != nil {
-				return err
-			}
+	switch rv.Kind() {
+	case reflect.Struct:
+		return nil
+
+	case reflect.Slice, reflect.Array: // ensure non-empty and element type is struct
+		elemType := rv.Type().Elem()
+		if elemType.Kind() == reflect.Pointer {
+			elemType = elemType.Elem()
+		}
+
+		if elemType.Kind() != reflect.Struct {
+			return fmt.Errorf("slice element must be a struct, got %s", elemType.Kind())
 		}
 		return nil
 
+	default:
+		return fmt.Errorf("v must be a struct or slice/array of structs, got %s", rv.Kind())
+	}
+}
+
+type Message struct {
+	Message string `json:"message,omitempty"`
+	Code    string `json:"code,omitempty"`
+}
+
+func Render(w io.Writer, f string, v any) error {
+	if err := validate(v); err != nil {
+		return err
+	}
+
+	switch f {
+	case "ndjson":
+		return renderNDJSON(w, v)
+	case "json":
+		return renderJSON(w, v)
+	case "csv":
+		// return renderCSV(w, v)
+		return dev.NotImplemented()
+	case "text":
+		// return renderText(w, v)
+		return dev.NotImplemented()
+	default:
+		return fmt.Errorf("unknown format: %s", f)
+	}
+
+}
+
+func renderJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	return enc.Encode(v)
+}
+
+func renderNDJSON(w io.Writer, v any) error {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+
+	switch rv.Kind() {
 	case reflect.Struct:
-		switch f {
-		case FormatNDJSON:
-			return renderNDJSON(w, v)
-		case FormatJSON:
-			return renderJSON(w, v)
-		case FormatCSV:
-			return renderCSV(w, v)
-		case FormatText:
-			return renderText(w, v)
-		default:
-			return fmt.Errorf("unknown format: %s", f)
+		return renderJSON(w, v)
+
+	case reflect.Slice, reflect.Array:
+		for i := range rv.Len() {
+			elem := rv.Index(i).Interface()
+			if err := renderJSON(w, elem); err != nil {
+				return fmt.Errorf("ndjson: error at index %d: %w", i, err)
+			}
 		}
+		return nil
 
 	default:
 		return fmt.Errorf("expected struct or slice of struct")
 	}
 }
 
-func renderNDJSON(w io.Writer, v any) error {
-	return dev.NotImplemented()
-}
-
-func renderJSON(w io.Writer, v any) error {
-	return dev.NotImplemented()
-}
-
-func renderCSV(w io.Writer, v any) error {
-	return dev.NotImplemented()
-}
-
-func renderText(w io.Writer, v any) error {
-	return dev.NotImplemented()
-}
-
-func ParseFormat(s string) (Format, error) {
-	switch s {
-	case "ndjson":
-		return FormatNDJSON, nil
-	case "json":
-		return FormatJSON, nil
-	case "csv":
-		return FormatCSV, nil
-	case "text":
-		return FormatText, nil
-	default:
-		return "", fmt.Errorf("invalid format: %s", s)
-	}
-}
+// func renderCSV(w io.Writer, v any) error {
+// 	return dev.NotImplemented()
+// }
+//
+// func renderText(w io.Writer, v any) error {
+// 	return dev.NotImplemented()
+// }

@@ -2,11 +2,13 @@
 package config
 
 import (
-	"github.com/seantronsen/openchami-logq/query/internal/dev"
+	"github.com/seantronsen/openchami-logq/query/cmd/opts"
+	"github.com/seantronsen/openchami-logq/query/internal/config"
+	"github.com/seantronsen/openchami-logq/query/internal/render"
 	"github.com/spf13/cobra"
 )
 
-func NewCmd() *cobra.Command {
+func NewCmd(cfg *config.Config) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   "config",
 		Short: "Show current configuration",
@@ -14,9 +16,9 @@ func NewCmd() *cobra.Command {
 environment variables. Shows all relevant settings, marks unset values as UNSET,
 and redacts secrets as ********.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return dev.NotImplemented()
+			options := opts.FromCobraCmd(cmd)
+			return render.Render(options.Output, options.Format, cfg)
 		},
 	}
-
 	return cmd
 }
