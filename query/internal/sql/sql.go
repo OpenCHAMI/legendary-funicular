@@ -85,7 +85,7 @@ func (e *Engine) Query(querystr string, sources []string) (*sql.Rows, error) {
 			sourcesQuoted[i] = fmt.Sprintf("'%s'", s)
 		}
 		replacement := fmt.Sprintf(
-			"read_parquet([%s])",
+			"read_parquet([%s], union_by_name = true )",
 			strings.Join(sourcesQuoted, ", "),
 		)
 		querystr = strings.Replace(querystr, QueryPlaceholderSources, replacement, 1)
