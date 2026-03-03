@@ -29,7 +29,7 @@ inspection using serverless technologies.`,
 	rootCmd.AddCommand(
 		dump.NewCmd(cfg),
 		inspect.NewCmd(cfg),
-		report.NewCmd(),
+		report.NewCmd(cfg),
 		sql.NewCmd(cfg),
 		version.NewCmd(),
 	)
