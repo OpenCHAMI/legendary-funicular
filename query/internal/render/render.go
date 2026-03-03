@@ -1,8 +1,30 @@
-// Package render
+// Package render provides streaming encoders for CLI output.
+//
+// The core abstraction is a logical sequence of records. Encoders consume
+// individual records via Encode and write them incrementally to an io.Writer.
+// This design avoids materializing large slices in memory and supports
+// constant-memory streaming for dump-scale operations.
+//
+// Each format defines how a record sequence is framed:
+//
+//   - ndjson: each Encode emits one JSON value per line.
+//   - json: records are framed as a single JSON array; "[" is written on
+//     creation, elements are comma-delimited, and "]" is written on Close.
+//   - csv: records are written row-by-row, optionally with a header.
+//   - text: records are formatted line-by-line.
+//
+// Encoders operate on single records. Collection flattening (e.g. slice
+// handling) is performed by higher-level helpers such as Render, which
+// provides a convenience wrapper for small in-memory results.
+//
+// For large datasets, callers should construct an Encoder directly and
+// stream records via repeated Encode calls followed by Close.
 package render
 
+// use render for one off use cases
+// use encoder for long stream-like use cases
+
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -10,34 +32,23 @@ import (
 	"github.com/seantronsen/openchami-logq/query/internal/dev"
 )
 
-func validate(v any) error {
+type Encoder interface {
+	Encode(v any) error
+	Close() error
+}
 
-	if v == nil {
-		return fmt.Errorf("nil value")
-	}
-
-	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Pointer {
-		rv = rv.Elem()
-	}
-
-	switch rv.Kind() {
-	case reflect.Struct:
-		return nil
-
-	case reflect.Slice, reflect.Array: // ensure non-empty and element type is struct
-		elemType := rv.Type().Elem()
-		if elemType.Kind() == reflect.Pointer {
-			elemType = elemType.Elem()
-		}
-
-		if elemType.Kind() != reflect.Struct {
-			return fmt.Errorf("slice element must be a struct, got %s", elemType.Kind())
-		}
-		return nil
-
+func BuildEncoder(w io.Writer, f string) (Encoder, error) {
+	switch f {
+	case "ndjson":
+		return newEncoderNDJSON(w)
+	case "json":
+		return newEncoderJSON(w)
+	case "csv":
+		return nil, dev.NotImplemented()
+	case "text":
+		return nil, dev.NotImplemented()
 	default:
-		return fmt.Errorf("v must be a struct or slice/array of structs, got %s", rv.Kind())
+		return nil, fmt.Errorf("unknown format: %s", f)
 	}
 }
 
@@ -47,33 +58,26 @@ type Message struct {
 }
 
 func Render(w io.Writer, f string, v any) error {
-	if err := validate(v); err != nil {
-		return err
-	}
+	var enc Encoder
+	var err error
 
 	switch f {
 	case "ndjson":
-		return renderNDJSON(w, v)
+		enc, err = newEncoderNDJSON(w)
 	case "json":
-		return renderJSON(w, v)
+		enc, err = newEncoderJSON(w)
 	case "csv":
-		// return renderCSV(w, v)
 		return dev.NotImplemented()
 	case "text":
-		// return renderText(w, v)
 		return dev.NotImplemented()
 	default:
 		return fmt.Errorf("unknown format: %s", f)
 	}
+	if err != nil {
+		return err
+	}
+	defer enc.Close()
 
-}
-
-func renderJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	return enc.Encode(v)
-}
-
-func renderNDJSON(w io.Writer, v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -81,26 +85,17 @@ func renderNDJSON(w io.Writer, v any) error {
 
 	switch rv.Kind() {
 	case reflect.Struct:
-		return renderJSON(w, v)
+		return enc.Encode(v)
 
 	case reflect.Slice, reflect.Array:
 		for i := range rv.Len() {
 			elem := rv.Index(i).Interface()
-			if err := renderJSON(w, elem); err != nil {
-				return fmt.Errorf("ndjson: error at index %d: %w", i, err)
+			if err := enc.Encode(elem); err != nil {
+				return fmt.Errorf("encoder error at slice index %d: %w", i, err)
 			}
 		}
 		return nil
-
 	default:
 		return fmt.Errorf("expected struct or slice of struct")
 	}
 }
-
-// func renderCSV(w io.Writer, v any) error {
-// 	return dev.NotImplemented()
-// }
-//
-// func renderText(w io.Writer, v any) error {
-// 	return dev.NotImplemented()
-// }
