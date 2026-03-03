@@ -11,6 +11,7 @@ source: |
   .component_id = null
   .node_id = null
   .request_user = null
+  .request_uri = null
   .request_id = null
   .trace_id = null
   .parse_error = null
