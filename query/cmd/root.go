@@ -27,7 +27,7 @@ inspection using serverless technologies.`,
 	rootCmd.PersistentFlags().StringP("output", "o", "", "output file path (default: stdout)")
 
 	rootCmd.AddCommand(
-		dump.NewCmd(),
+		dump.NewCmd(cfg),
 		inspect.NewCmd(cfg),
 		report.NewCmd(),
 		sql.NewCmd(cfg),
