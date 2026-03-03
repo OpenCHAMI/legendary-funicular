@@ -99,3 +99,42 @@ func Render(w io.Writer, f string, v any) error {
 		return fmt.Errorf("expected struct or slice of struct")
 	}
 }
+
+func MaskSecrets(v any) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return
+	}
+
+	rv = rv.Elem()
+	if rv.Kind() != reflect.Struct {
+		return
+	}
+
+	rt := rv.Type()
+
+	for i := range rv.NumField() {
+		fieldVal := rv.Field(i)
+		fieldType := rt.Field(i)
+
+		if !fieldVal.CanSet() {
+			continue
+		}
+
+		if fieldType.Tag.Get("secret") != "true" {
+			continue
+		}
+
+		if fieldVal.Kind() != reflect.Pointer ||
+			fieldVal.Type().Elem().Kind() != reflect.String {
+			continue
+		}
+
+		if fieldVal.IsNil() {
+			continue
+		}
+
+		masked := "************************"
+		fieldVal.Set(reflect.ValueOf(&masked))
+	}
+}

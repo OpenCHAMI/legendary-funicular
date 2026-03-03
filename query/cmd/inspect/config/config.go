@@ -17,6 +17,7 @@ environment variables. Shows all relevant settings, marks unset values as UNSET,
 and redacts secrets as ********.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options := opts.FromCobraCmd(cmd)
+			render.MaskSecrets(cfg)
 			return render.Render(options.Output, options.Format, cfg)
 		},
 	}
