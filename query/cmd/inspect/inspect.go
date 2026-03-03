@@ -20,7 +20,7 @@ available date partitions and schema information.`,
 	cmd.AddCommand(
 		cmdConfig.NewCmd(cfg),
 		cmdDates.NewCmd(cfg),
-		cmdSchema.NewCmd(),
+		cmdSchema.NewCmd(cfg),
 	)
 
 	return cmd
