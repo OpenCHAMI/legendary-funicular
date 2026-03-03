@@ -11,8 +11,8 @@ func NewCmd() *cobra.Command {
 		Use:   "dates",
 		Short: "List available dates",
 		Long:  "List available dates with captures available in the log lake.",
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

@@ -10,11 +10,11 @@ func NewCmd() *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   "config",
 		Short: "Show current configuration",
-		Long:  `Display the effective configuration as resolved from CLI flags and 
-environment variables. Shows all relevant settings, marks unset values as UNSET, 
+		Long: `Display the effective configuration as resolved from CLI flags and
+environment variables. Shows all relevant settings, marks unset values as UNSET,
 and redacts secrets as ********.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

@@ -13,8 +13,8 @@ func NewCmd() *cobra.Command {
 		Long: `Dump dataset records from S3 to stdout, enabling both dataset
 migration through standard shell redirection and downstream preprocessing via
 pipes.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

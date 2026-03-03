@@ -1,6 +1,8 @@
 // Package dev
 package dev
 
-func NotImplemented() {
-	panic("not implemented error")
+import "errors"
+
+func NotImplemented() error {
+	return errors.New("not implemented")
 }

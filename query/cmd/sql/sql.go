@@ -11,8 +11,8 @@ func NewCmd() *cobra.Command {
 		Use:   "sql",
 		Short: "Execute ad-hoc SQL queries",
 		Long:  "Execute ad-hoc SQL queries against both raw and compacted datasets in S3.",
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

@@ -12,8 +12,8 @@ func NewCmd() *cobra.Command {
 		Short: "Describe a report",
 		Long: `Show detailed information about a report, including required
 parameters, defaults, and the underlying SQL query.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

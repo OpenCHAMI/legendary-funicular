@@ -11,8 +11,8 @@ func NewCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List available reports",
 		Long:  "List all available predefined reports along with a brief description to aid discovery.",
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 

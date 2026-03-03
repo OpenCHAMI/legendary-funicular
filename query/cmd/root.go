@@ -20,11 +20,7 @@ func NewRootCmd() *cobra.Command {
 DuckDB. It supports ad-hoc SQL queries, predefined reports, and dataset
 inspection using serverless technologies.`,
 	}
-	return rootCmd
-}
 
-func Execute() {
-	rootCmd := NewRootCmd()
 	rootCmd.AddCommand(
 		dump.NewCmd(),
 		inspect.NewCmd(),
@@ -33,6 +29,11 @@ func Execute() {
 		version.NewCmd(),
 	)
 
+	return rootCmd
+}
+
+func Execute() {
+	rootCmd := NewRootCmd()
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)

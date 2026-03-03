@@ -13,8 +13,8 @@ func NewCmd() *cobra.Command {
 		Long: `Execute a predefined, parameterized report against the log lake.
 Reports encapsulate common queries and accept arguments for filtering and
 analysis without requiring raw SQL.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			dev.NotImplemented()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return dev.NotImplemented()
 		},
 	}
 
