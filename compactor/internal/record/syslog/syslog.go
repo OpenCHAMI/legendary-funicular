@@ -14,6 +14,7 @@ type Syslog struct {
 	IDNode      *string `json:"node_id" parquet:"node_id"`
 	IDTrace     *string `json:"trace_id" parquet:"trace_id"`
 	IDRequest   *string `json:"request_id" parquet:"request_id"`
+	RequestURI  *string `json:"request_uri" parquet:"request_uri"`
 	RequestUser *string `json:"request_user" parquet:"request_user"`
 	ParseError  *string `json:"parse_error" parquet:"parse_error"`
 	PayloadJSON *string `json:"payload_json" parquet:"payload_json"`
