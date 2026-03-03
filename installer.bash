@@ -111,6 +111,11 @@ install-dir deploy/scripts /usr/local/libexec 0755
     mv compactor openchami-logq-compactor
     install-file ./openchami-logq-compactor /usr/local/libexec 0755
 )
+(
+    cd query
+    /usr/local/go/bin/go build -o openchami-logq .
+    install-file ./openchami-logq /usr/local/bin 0755
+)
 
 echo "creating service work directories"
 mkdir -vp /var/lib/vector
