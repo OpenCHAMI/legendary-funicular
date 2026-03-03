@@ -32,3 +32,7 @@ routes:
     condition:
       type: vrl
       source: .appname == "step-ca"
+  - name: "cloud_init_server"
+    condition:
+      type: vrl
+      source: .appname == "cloud-init-server"

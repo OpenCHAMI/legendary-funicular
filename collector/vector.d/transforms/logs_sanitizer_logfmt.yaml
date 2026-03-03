@@ -6,6 +6,7 @@ inputs:
   - logs_exclusiverouter.smd
   - logs_exclusiverouter.hydra
   - logs_exclusiverouter.step_ca
+  - logs_exclusiverouter.cloud_init_server
 source: |-
   if .message != "" {
     result, .parse_error = parse_logfmt(string!(.message))
