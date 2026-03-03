@@ -6,4 +6,72 @@ inputs:
 
 # conceptually, this node represents the join of fork/join
 source: |
-  # no op
+  ################################################################################
+  # Logical join point of the forked parsing paths above.
+  # At this stage, events may or may not have successfully produced
+  # structured fields. This transform performs a final, deterministic
+  # promotion pass to populate canonical OpenCHAMI root-level fields
+  # from `.data` when possible.
+  #
+  # The scope is intentionally narrow: only well-understood, low-risk
+  # extractions needed for the demo. Full normalization will be
+  # implemented once services converge on structured logging.
+  ################################################################################
+
+  ################################################################################
+  # HOPEFUL PHASE (i.e., check previous transform results for missing fields)
+  ################################################################################
+  # request_uri
+  if is_null(.request_uri) && exists(.data.request_uri) && !is_null(.data.request_uri) {
+    .request_uri = .data.request_uri
+  }
+
+  # request_id
+  if is_null(.request_id) && exists(.data.request_id) && !is_null(.data.request_id) {
+    .request_id = .data.request_id
+  }
+
+  # component_id
+  if is_null(.component_id) && exists(.data.component_id) && !is_null(.data.component_id) {
+    .component_id = .data.component_id
+  }
+
+  # node_id
+  if is_null(.node_id) && exists(.data.node_id) && !is_null(.data.node_id) {
+    .node_id = .data.node_id
+  }
+
+  # trace_id
+  if is_null(.trace_id) && exists(.data.trace_id) && !is_null(.data.trace_id) {
+    .trace_id = .data.trace_id
+  }
+
+  # xname
+  if is_null(.xname) && exists(.data.xname) && !is_null(.data.xname) {
+    .xname = .data.xname
+  }
+
+  ################################################################################
+  # BEST EFFORT PHASE
+  ################################################################################
+  # Only attempt if node_id is not already set
+  if (!is_string(.node_id)) && exists(.message) && is_string(.message) {
+    # normalize (lowercase)
+    msg = downcase(string!(.message))
+    m, err = parse_regex(msg, r'nid[=\s]+(?P<node_id>[A-Za-z0-9]+)')
+
+    if err == null && m != null {
+      .node_id = m.node_id
+    }
+  }
+
+  # Only attempt if xname is not already set
+  if (!is_string(.xname)) && exists(.message) && is_string(.message) {
+    # normalize (lowercase)
+    msg = downcase(string!(.message))
+    m, err = parse_regex(msg, r'xname[=\s]+(?P<xname>[A-Za-z0-9]+)')
+
+    if err == null && m != null {
+      .xname = m.xname
+    }
+  }
