@@ -1,7 +1,6 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
-*/
+// SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+//
+// SPDX-License-Identifier: MIT
 package main
 
 import "github.com/seantronsen/openchami-logq/query/cmd"

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+
+SPDX-License-Identifier: MIT
+-->
+
 # openchami-logq
 
 Lightweight log lake + DuckDB query tool for OpenCHAMI.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+//
+// SPDX-License-Identifier: MIT
+
 // Package render provides streaming encoders for CLI output.
 //
 // The core abstraction is a logical sequence of records. Encoders consume
