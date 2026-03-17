@@ -41,10 +41,10 @@ Stack:
   - Best-effort field extraction
   - Parquet readable directly from S3
 
-- [ ] **Phase 4 - Query CLI (Go + DuckDB)**
+- [x] **Phase 4 - Query CLI (Go + DuckDB)**
   - CLI: `openchami-logq --date ... --kind logs|events --sql "..."`
   - Queries Parquet directly from VersityGW
 
-- [ ] **Phase 5 — Domain queries**
+- [x] **Phase 5 — Domain queries**
   - Canned OpenCHAMI-relevant queries (errors by service, trace walk, xname
     grouping, etc.)
