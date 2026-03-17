@@ -7,12 +7,12 @@ package dates
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/seantronsen/openchami-logq/query/cmd/opts"
+	"github.com/seantronsen/openchami-logq/query/cmd/query"
 	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/render"
-	"github.com/seantronsen/openchami-logq/query/internal/sql"
 	"github.com/spf13/cobra"
 )
 
@@ -23,21 +23,34 @@ func NewCmd(cfg *config.Config) *cobra.Command {
 		Long:  "List available dates with captures available in the log lake.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options := opts.FromCobraCmd(cmd)
-			return run(cfg, options)
+			querystr, err := buildQueryString(options)
+			if err != nil {
+				return err
+			}
+			return query.ExecStructured(
+				querystr,
+				context.TODO(),
+				cfg,
+				opts.FromCobraCmd(cmd),
+				scanner,
+			)
 		},
 	}
 
 	return cmd
 }
 
-type Record struct {
+type record struct {
 	Date string `json:"date"`
 }
 
-// todo: again with the common logic. might be able to reduce with generics.
-func run(cfg *config.Config, options opts.Opts) error {
-	ctx := context.TODO()
+func scanner(rows *sql.Rows) (record, error) {
+	var record record
+	err := rows.Scan(&record.Date)
+	return record, err
+}
 
+func buildQueryString(options opts.Opts) (string, error) {
 	var expr string
 
 	switch options.Source {
@@ -46,44 +59,13 @@ func run(cfg *config.Config, options opts.Opts) error {
 	case "logs":
 		expr = "ts"
 	default:
-		return fmt.Errorf("unknown source: %s", options.Source)
+		return expr, fmt.Errorf("unknown source: %s", options.Source)
 	}
 
-	querystr := fmt.Sprintf(`
+	return fmt.Sprintf(`
 SELECT DISTINCT
-    CAST(%s AS DATE) AS date
+	CAST(%s AS DATE) AS date
 FROM SOURCES
 ORDER BY date;
-	`, expr)
-	sources := options.BuildSources(cfg)
-	engine, err := sql.New(cfg, ctx)
-	if err != nil {
-		return err
-	}
-	defer engine.Close()
-
-	enc, err := render.BuildEncoder(options.Output, options.Format)
-	if err != nil {
-		return err
-	}
-	defer enc.Close()
-
-	rows, err := engine.Query(querystr, sources)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var record Record
-
-		if err := rows.Scan(&record.Date); err != nil {
-			return err
-		}
-		if err := enc.Encode(record); err != nil {
-			return err
-		}
-	}
-
-	return nil
+			`, expr), nil
 }
