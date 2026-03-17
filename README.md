@@ -6,6 +6,13 @@ SPDX-License-Identifier: MIT
 
 # openchami-logq
 
+> **Active Development** — No stable release yet. Core functionality is still
+> being shaped; known gaps and TODOs are actively being migrated from a private
+> repo and documented. Expect many breaking changes.
+>
+> Users can install from the `main` branch using the provided `./installer.bash` script.
+> An RPM package is in the works to streamline this process.
+
 Lightweight log lake + DuckDB query tool for OpenCHAMI.
 
 **Goal:** preserve all logs/events safely (schema-flexible), store them cheaply,
