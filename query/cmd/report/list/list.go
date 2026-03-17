@@ -10,8 +10,9 @@ import (
 	"strings"
 
 	"github.com/seantronsen/openchami-logq/query/cmd/opts"
+	"github.com/seantronsen/openchami-logq/query/cmd/report/registry"
 	"github.com/seantronsen/openchami-logq/query/internal/render"
-	"github.com/seantronsen/openchami-logq/query/internal/reports"
+	"github.com/seantronsen/openchami-logq/query/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -29,15 +30,15 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-type Record struct {
+type record struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
 func run(options opts.Opts) error {
 
-	items := append([]reports.Report(nil), reports.Registry...)
-	slices.SortFunc(items, func(a, b reports.Report) int {
+	items := registry.New()
+	slices.SortFunc(items, func(a, b report.Report) int {
 		return strings.Compare(a.Name(), b.Name())
 	})
 
@@ -48,11 +49,10 @@ func run(options opts.Opts) error {
 	defer enc.Close()
 
 	for _, r := range items {
-		rec := Record{Name: r.Name(), Description: r.Description()}
+		rec := record{Name: r.Name(), Description: r.Description()}
 		if err := enc.Encode(rec); err != nil {
 			return err
 		}
 	}
 	return nil
-
 }

@@ -8,13 +8,13 @@ package describe
 import (
 	"context"
 	"fmt"
-	"slices"
+	"log/slog"
 
 	"github.com/seantronsen/openchami-logq/query/cmd/opts"
+	"github.com/seantronsen/openchami-logq/query/cmd/query"
+	"github.com/seantronsen/openchami-logq/query/cmd/report/registry"
 	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/render"
-	"github.com/seantronsen/openchami-logq/query/internal/reports"
-	"github.com/seantronsen/openchami-logq/query/internal/sql"
+	"github.com/seantronsen/openchami-logq/query/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -26,76 +26,37 @@ func NewCmd(cfg *config.Config) *cobra.Command {
 		parameters, defaults, and the underlying SQL query (warning: experimental).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// todo: fix
+			// though, it does bring about questions on how to structure it
+			// when we enable multiple output formats... regardless, it will
+			// likely require a rewrite of the rendering library.
+			slog.Warn("the describe subcommand is missing logic for detailing any arguments associated with a given report")
+
 			choice := args[0]
-			options := opts.FromCobraCmd(cmd)
-			return run(cfg, options, choice)
+			r, err := registry.Get(choice)
+			if err != nil {
+				return err
+			}
+
+			// semi-redundant b/c of the Args definition, leaving as change guard
+			if len(args[1:]) != 0 {
+				return fmt.Errorf("received unexpected additional arguments: %s", args[1:])
+			}
+
+			querystr, err := report.BuildSchemaQueryStr(r)
+			if err != nil {
+				return err
+			}
+
+			return query.ExecStructured(
+				querystr,
+				context.TODO(),
+				cfg,
+				opts.FromCobraCmd(cmd),
+				query.ScanRecordSchemaInspection,
+			)
 		},
 	}
 
 	return cmd
-}
-
-// todo: again with the re-use....  need to make a generalized "Schema"
-// flavor struct abstraction for all cases where we're simply
-// displaying an output schema.
-
-type Record struct {
-	ColumnName string `json:"column_name"`
-	ColumnType string `json:"column_type"`
-	IsNullable string `json:"is_nullable"`
-}
-
-// todo: again with the common logic. might be able to reduce with generics.
-func run(cfg *config.Config, options opts.Opts, choice string) error {
-	ctx := context.TODO()
-	idx := slices.IndexFunc(reports.Registry, func(r reports.Report) bool {
-		return r.Name() == choice
-	})
-	if idx < 0 {
-		return fmt.Errorf("unknown report: %s", choice)
-	}
-
-	querystr := fmt.Sprintf(`
-SELECT
-	column_name,
-	column_type,
-	"null" AS is_nullable
-FROM (
-	DESCRIBE %s
-);`, reports.Registry[idx].BuildQueryString())
-
-	sources := options.BuildSources(cfg)
-	engine, err := sql.New(cfg, ctx)
-	if err != nil {
-		return err
-	}
-	defer engine.Close()
-
-	enc, err := render.BuildEncoder(options.Output, options.Format)
-	if err != nil {
-		return err
-	}
-	defer enc.Close()
-
-	rows, err := engine.Query(querystr, sources)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var record Record
-		if err := rows.Scan(
-			&record.ColumnName,
-			&record.ColumnType,
-			&record.IsNullable,
-		); err != nil {
-			return err
-		}
-		if err := enc.Encode(record); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
