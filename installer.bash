@@ -81,8 +81,8 @@ install-dir() {
 ################################################################################
 GO=/usr/local/go/bin/go
 
-ORG=seantronsen
-NAME=openchami-logq/query
+ORG=OpenCHAMI
+NAME=legendary-funicular/query
 IMPORT=github.com/${ORG}/${NAME}/
 VERSION=$(git describe --tags --always --dirty --broken --abbrev=0)
 TAG=$(git describe --tags --always --abbrev=0)
