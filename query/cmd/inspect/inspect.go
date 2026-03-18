@@ -6,10 +6,10 @@
 package inspect
 
 import (
-	cmdConfig "github.com/seantronsen/openchami-logq/query/cmd/inspect/config"
-	cmdDates "github.com/seantronsen/openchami-logq/query/cmd/inspect/dates"
-	cmdSchema "github.com/seantronsen/openchami-logq/query/cmd/inspect/schema"
-	"github.com/seantronsen/openchami-logq/query/internal/config"
+	cmdConfig "github.com/OpenCHAMI/legendary-funicular/query/cmd/inspect/config"
+	cmdDates "github.com/OpenCHAMI/legendary-funicular/query/cmd/inspect/dates"
+	cmdSchema "github.com/OpenCHAMI/legendary-funicular/query/cmd/inspect/schema"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
 	"github.com/spf13/cobra"
 )
 

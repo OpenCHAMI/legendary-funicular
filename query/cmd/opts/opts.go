@@ -11,8 +11,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/utils"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/utils"
 	"github.com/spf13/cobra"
 )
 

@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/seantronsen/openchami-logq/query/cmd/opts"
-	"github.com/seantronsen/openchami-logq/query/cmd/report/registry"
-	"github.com/seantronsen/openchami-logq/query/internal/render"
-	"github.com/seantronsen/openchami-logq/query/internal/report"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report/registry"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/render"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/report"
 	"github.com/spf13/cobra"
 )
 

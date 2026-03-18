@@ -4,7 +4,7 @@
 
 package registry
 
-import "github.com/seantronsen/openchami-logq/query/internal/report"
+import "github.com/OpenCHAMI/legendary-funicular/query/internal/report"
 
 // //////////////////////////////////////////////////////////////////////////////
 // REPORT: FIND PARSE ERRORS

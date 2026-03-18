@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/seantronsen/openchami-logq/query/internal/version"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/version"
 	"github.com/spf13/cobra"
 )
 

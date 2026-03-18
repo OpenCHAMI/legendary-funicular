@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	_ "github.com/duckdb/duckdb-go/v2"
-	"github.com/seantronsen/openchami-logq/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
 )
 
 const QueryPlaceholderSources = "SOURCES"

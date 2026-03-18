@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/seantronsen/openchami-logq/query/internal/dev"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/dev"
 )
 
 type ParamSpec struct {

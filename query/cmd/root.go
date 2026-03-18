@@ -8,11 +8,11 @@ package cmd
 import (
 	"os"
 
-	"github.com/seantronsen/openchami-logq/query/cmd/dump"
-	"github.com/seantronsen/openchami-logq/query/cmd/inspect"
-	"github.com/seantronsen/openchami-logq/query/cmd/report"
-	"github.com/seantronsen/openchami-logq/query/cmd/sql"
-	"github.com/seantronsen/openchami-logq/query/cmd/version"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/dump"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/inspect"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/sql"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/version"
 	"github.com/spf13/cobra"
 )
 

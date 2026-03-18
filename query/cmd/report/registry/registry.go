@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/seantronsen/openchami-logq/query/internal/report"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/report"
 )
 
 func New() []report.Report {

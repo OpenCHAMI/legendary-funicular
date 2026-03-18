@@ -6,10 +6,10 @@
 package report
 
 import (
-	"github.com/seantronsen/openchami-logq/query/cmd/report/describe"
-	"github.com/seantronsen/openchami-logq/query/cmd/report/list"
-	"github.com/seantronsen/openchami-logq/query/cmd/report/run"
-	"github.com/seantronsen/openchami-logq/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report/describe"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report/list"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report/run"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
 	"github.com/spf13/cobra"
 )
 

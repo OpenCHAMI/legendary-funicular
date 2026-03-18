@@ -5,8 +5,8 @@
 package cmd
 
 import (
-	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/utils"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/utils"
 )
 
 func BuildCfg() *config.Config {

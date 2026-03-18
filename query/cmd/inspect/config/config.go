@@ -6,9 +6,9 @@
 package config
 
 import (
-	"github.com/seantronsen/openchami-logq/query/cmd/opts"
-	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/render"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/render"
 	"github.com/spf13/cobra"
 )
 

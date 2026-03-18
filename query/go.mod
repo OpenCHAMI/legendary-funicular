@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-module github.com/seantronsen/openchami-logq/query
+module github.com/OpenCHAMI/legendary-funicular/query
 
 go 1.25.5
 

@@ -8,11 +8,11 @@ package run
 import (
 	"context"
 
-	"github.com/seantronsen/openchami-logq/query/cmd/opts"
-	"github.com/seantronsen/openchami-logq/query/cmd/query"
-	"github.com/seantronsen/openchami-logq/query/cmd/report/registry"
-	"github.com/seantronsen/openchami-logq/query/internal/config"
-	"github.com/seantronsen/openchami-logq/query/internal/report"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/query"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/report/registry"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
+	"github.com/OpenCHAMI/legendary-funicular/query/internal/report"
 	"github.com/spf13/cobra"
 )
 

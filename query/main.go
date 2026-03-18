@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 package main
 
-import "github.com/seantronsen/openchami-logq/query/cmd"
+import "github.com/OpenCHAMI/legendary-funicular/query/cmd"
 
 func main() {
 	cmd.Execute()
