@@ -74,6 +74,39 @@ install-dir() {
 
 ################################################################################
 ################################################################################
+# BUILD VARS
+# Derived from:
+# https://github.com/OpenCHAMI/ochami/blob/2247677c4e2a944e230872b5024100078dd8efec/Makefile
+################################################################################
+################################################################################
+GO=/usr/local/go/bin/go
+
+ORG=seantronsen
+NAME=openchami-logq/query
+IMPORT=github.com/${ORG}/${NAME}/
+VERSION=$(git describe --tags --always --dirty --broken --abbrev=0)
+TAG=$(git describe --tags --always --abbrev=0)
+BRANCH=$(git branch --show-current)
+BUILD=$(git rev-parse HEAD)
+GOVER=$(${GO} env GOVERSION)
+GITSTATE=$(if output=$(git status --porcelain) && [ -n "$output" ]; then echo dirty; else echo clean; fi)
+BUILDHOST=$(hostname)
+BUILDUSER=$(whoami)
+
+LDFLAGS="-s"
+LDFLAGS+=" -X ${IMPORT}internal/version.Version=${VERSION}"
+LDFLAGS+=" -X ${IMPORT}internal/version.Tag=${TAG}"
+LDFLAGS+=" -X ${IMPORT}internal/version.Branch=${BRANCH}"
+LDFLAGS+=" -X ${IMPORT}internal/version.Commit=${BUILD}"
+LDFLAGS+=" -X ${IMPORT}internal/version.Date=$(date -Iseconds)"
+LDFLAGS+=" -X ${IMPORT}internal/version.GoVersion=${GOVER}"
+LDFLAGS+=" -X ${IMPORT}internal/version.GitState=${GITSTATE}"
+LDFLAGS+=" -X ${IMPORT}internal/version.BuildHost=${BUILDHOST}"
+LDFLAGS+=" -X ${IMPORT}internal/version.BuildUser=${BUILDUSER}"
+
+################################################################################
+################################################################################
+# INSTALL
 ################################################################################
 ################################################################################
 
@@ -111,13 +144,13 @@ install-dir deploy/systemd/system /etc/systemd/system 0644
 install-dir deploy/scripts /usr/local/libexec 0755
 (
     cd compactor
-    /usr/local/go/bin/go build .
+    ${GO} build .
     mv compactor openchami-logq-compactor
     install-file ./openchami-logq-compactor /usr/local/libexec 0755
 )
 (
     cd query
-    /usr/local/go/bin/go build -o openchami-logq .
+    ${GO} build -v -o openchami-logq -ldflags="${LDFLAGS}"
     install-file ./openchami-logq /usr/local/bin 0755
 )
 
