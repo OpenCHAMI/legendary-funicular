@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/seantronsen/openchami-logq/compactor/internal/record/cloudevent"
-	"github.com/seantronsen/openchami-logq/compactor/internal/record/syslog"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record/cloudevent"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record/syslog"
 )
 
 func main() {

@@ -8,8 +8,8 @@ package record
 import (
 	"bufio"
 	"io"
-	"github.com/seantronsen/openchami-logq/compactor/internal/record/cloudevent"
-	"github.com/seantronsen/openchami-logq/compactor/internal/record/syslog"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record/cloudevent"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record/syslog"
 )
 
 type Record interface {

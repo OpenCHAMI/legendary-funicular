@@ -14,11 +14,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/parquet-go/parquet-go"
-	"github.com/seantronsen/openchami-logq/compactor/internal/aws/config"
-	"github.com/seantronsen/openchami-logq/compactor/internal/aws/s3/bucket"
-	"github.com/seantronsen/openchami-logq/compactor/internal/pipeline"
-	"github.com/seantronsen/openchami-logq/compactor/internal/record"
-	"github.com/seantronsen/openchami-logq/compactor/internal/zio"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/aws/config"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/aws/s3/bucket"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/pipeline"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/zio"
 )
 
 func checkErr(err error, shouldExit bool) {

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-module github.com/seantronsen/openchami-logq/compactor
+module github.com/OpenCHAMI/legendary-funicular/compactor
 
 go 1.25.5
 

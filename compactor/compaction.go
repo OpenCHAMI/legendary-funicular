@@ -11,8 +11,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/seantronsen/openchami-logq/compactor/internal/aws/s3/bucket"
-	"github.com/seantronsen/openchami-logq/compactor/internal/record"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/aws/s3/bucket"
+	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record"
 )
 
 func compaction[T record.Record](
