@@ -44,7 +44,7 @@ set -euo pipefail
 # | --------------- | -------------------------- | ------------------------------ | ---------------------------------------- |
 # | `log-writer`    | **write-only** (PutObject) | none                           | Vector / Fluent Bit pushes raw           |
 # | `log-compactor` | **read** (Get/List)        | **write** (Put + maybe Delete) | Batch job reads raw → writes Parquet     |
-# | `log-reader`    | none                       | **read-only** (Get/List)       | DuckDB CLI / query utility reads Parquet |
+# | `log-reader`    | **read-only** (Get/List)   | **read-only** (Get/List)       | DuckDB CLI / query utility reads Parquet |
 ################################################################################
 ################################################################################
 
@@ -218,7 +218,8 @@ aws --profile "${ROOT_PROFILE}" \
     --grant-write "$(get_user_access ${USER_LOG_WRITER})" \
     --grant-write "$(get_user_access ${USER_LOG_COMPACTOR})" \
     --grant-read "$(get_user_access ${USER_LOG_WRITER})" \
-    --grant-read "$(get_user_access ${USER_LOG_COMPACTOR})"
+    --grant-read "$(get_user_access ${USER_LOG_COMPACTOR})" \
+    --grant-read "$(get_user_access ${USER_LOG_READER})"
 
 # DAILY
 aws --profile "${ROOT_PROFILE}" \
@@ -270,6 +271,18 @@ PATH_WORK=$(mktemp -d)
     {
       "Effect": "Allow",
       "Principal": "$(get_user_access ${USER_LOG_COMPACTOR})",
+      "Action": ["s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_READER})",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::${BUCKET_RAW}/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Principal": "$(get_user_access ${USER_LOG_READER})",
       "Action": ["s3:ListBucket"],
       "Resource": ["arn:aws:s3:::${BUCKET_RAW}"]
     }
