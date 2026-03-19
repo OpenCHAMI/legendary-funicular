@@ -27,7 +27,7 @@ func NewCmd(cfg *config.Config) *cobra.Command {
 			"null" AS is_nullable
 		FROM (
 			DESCRIBE SELECT * FROM SOURCES
-		);`
+		)`
 
 			return query.ExecStructured(
 				querystr,

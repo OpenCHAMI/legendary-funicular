@@ -24,7 +24,7 @@ pipes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options := opts.FromCobraCmd(cmd)
 			ctx := context.TODO()
-			querystr := "SELECT * FROM SOURCES;"
+			querystr := "SELECT * FROM SOURCES"
 			return query.ExecUnstructured(querystr, ctx, cfg, options)
 		},
 	}

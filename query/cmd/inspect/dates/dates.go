@@ -66,6 +66,6 @@ func buildQueryString(options opts.Opts) (string, error) {
 SELECT DISTINCT
 	CAST(%s AS DATE) AS date
 FROM SOURCES
-ORDER BY date;
+ORDER BY date
 			`, expr), nil
 }
