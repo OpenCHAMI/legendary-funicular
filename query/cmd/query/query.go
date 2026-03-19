@@ -34,14 +34,18 @@ func ExecUnstructured(
 	}
 	defer enc.Close()
 
-	rows, err := engine.Query(querystr, sources)
+	// todo: handle semi-structured case where the faster scanner is
+	// applicable (e.g., the case where we can trust the output).
+	rows, err := engine.Query(querystr, sources, true)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		record, err := sql.ScanRowToMap(rows)
+		// todo: handle semi-structured case where the faster scanner is
+		// applicable (e.g., the case where we can trust the output).
+		record, err := sql.ScanRowJSONToMap(rows)
 		if err != nil {
 			return err
 		}
@@ -76,7 +80,7 @@ func ExecStructured[T any](
 	}
 	defer enc.Close()
 
-	rows, err := engine.Query(querystr, sources)
+	rows, err := engine.Query(querystr, sources, false)
 	if err != nil {
 		return err
 	}
