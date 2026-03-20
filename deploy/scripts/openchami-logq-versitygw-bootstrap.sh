@@ -231,6 +231,16 @@ aws --profile "${ROOT_PROFILE}" \
 
 # 7. configure expected bucket level Policies
 
+# NOTE: Attempts were made to condense the JSON policy specification by
+# de-duplicating action authorizations w.r.t. user accounts, but initial
+# testing revealed service failures.
+#
+# It's possible this is just a quirk of VersityGW at this time since we did
+# follow the documentation for specifying multiple principals (i.e., user
+# accounts): https://github.com/versity/versitygw/wiki/Differences-from-AWS-S3#policies
+#
+# So while the policy document below is overly verbose, it is functional.
+
 # use ol' reliable temp workdir strategy
 PATH_WORK=$(mktemp -d)
 (
