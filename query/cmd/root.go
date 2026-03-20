@@ -26,7 +26,8 @@ DuckDB. It supports ad-hoc SQL queries, predefined reports, and dataset
 inspection using serverless technologies.`,
 	}
 
-	rootCmd.PersistentFlags().StringP("source", "s", "logs", "output file path (logs, events)")
+	rootCmd.PersistentFlags().StringP("scope", "S", "all", "data scope (all, compacted, recent)")
+	rootCmd.PersistentFlags().StringP("source", "s", "logs", "data source (logs, events)")
 	rootCmd.PersistentFlags().StringP("format", "f", "ndjson", "output format (json, ndjson)")
 	rootCmd.PersistentFlags().StringP("output", "o", "", "output file path (default: stdout)")
 

@@ -86,14 +86,17 @@ func (e *Engine) prepareQuerystr(querystr string, sources []string) (string, err
 			}
 		}
 
-		sourcesQuoted := make([]string, len(sources))
-		for i, s := range sources {
-			sourcesQuoted[i] = fmt.Sprintf("'%s'", s)
+		var replacement string
+		if len(sources) == 1 {
+			replacement = sources[0]
+		} else {
+			var subqueries []string
+			for _, s := range sources {
+				subqueries = append(subqueries, fmt.Sprintf("SELECT * FROM %s", s))
+			}
+			replacement = strings.Join(subqueries, " UNION ALL BY NAME ")
+			replacement = fmt.Sprintf("(%s)", replacement)
 		}
-		replacement := fmt.Sprintf(
-			"read_parquet([%s], union_by_name = true )",
-			strings.Join(sourcesQuoted, ", "),
-		)
 		querystr = strings.Replace(querystr, QueryPlaceholderSources, replacement, 1)
 	}
 
