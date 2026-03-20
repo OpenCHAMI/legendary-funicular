@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -68,12 +69,28 @@ func (e *Engine) Close() error {
 	return e.Pool.Close()
 }
 
+// todo: another candidate for a grammar/formal parser
+// might be able to find an existing duckdb grammar online to save time...
 func (e *Engine) prepareQuerystr(querystr string, sources []string) (string, error) {
 	// remove trailing ; if it exists to prep for potential query nesting
 	querystr = strings.TrimSpace(querystr)
 	if len(querystr) > 0 && querystr[len(querystr)-1] == ';' {
 		querystr = querystr[:len(querystr)-1]
 	}
+
+	// todo: if contains * or ,?\s*data
+	s := strings.ToLower(querystr)
+	pt := strings.Index(s, "from")
+	if pt < 0 {
+		return querystr, errors.New("invalid SQL query")
+	}
+	s = s[:pt]
+	if strings.Contains(s, "*") {
+		querystr = strings.Replace(querystr, "*", "* exclude(data), json(data) as data", 1)
+	} else if strings.Contains(s, "data") {
+		querystr = strings.Replace(querystr, "data", "json(data) as data", 1)
+	}
+
 	if strings.Contains(querystr, QueryPlaceholderSources) {
 		if sources == nil {
 			return querystr, fmt.Errorf("SOURCES present but sources slice is nil")
