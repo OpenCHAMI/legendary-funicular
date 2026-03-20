@@ -79,3 +79,10 @@ source: |
       .xname = m.xname
     }
   }
+
+  ################################################################################
+  # UNIFORMITY PHASE
+  # ensure ndjson layout matches parquet layout for simplified duckdb queries
+  ################################################################################
+  # ensure type(data)=jsonstr to match parquet storage format
+  .data = encode_json(.data)
