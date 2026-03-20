@@ -59,9 +59,9 @@ source: |
   # BEST EFFORT PHASE
   ################################################################################
   # Only attempt if node_id is not already set
-  if (!is_string(.node_id)) && exists(.message) && is_string(.message) {
+  if (!is_string(.node_id)) && exists(.msg) && is_string(.msg) {
     # normalize (lowercase)
-    msg = downcase(string!(.message))
+    msg = downcase(string!(.msg))
     m, err = parse_regex(msg, r'nid[=\s]+(?P<node_id>[A-Za-z0-9]+)')
 
     if err == null && m != null {
@@ -70,9 +70,9 @@ source: |
   }
 
   # Only attempt if xname is not already set
-  if (!is_string(.xname)) && exists(.message) && is_string(.message) {
+  if (!is_string(.xname)) && exists(.msg) && is_string(.msg) {
     # normalize (lowercase)
-    msg = downcase(string!(.message))
+    msg = downcase(string!(.msg))
     m, err = parse_regex(msg, r'xname[=\s]+(?P<xname>[A-Za-z0-9]+)')
 
     if err == null && m != null {

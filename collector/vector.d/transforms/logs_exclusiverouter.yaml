@@ -11,32 +11,32 @@ routes:
   - name: "registry"
     condition:
       type: vrl
-      source: .appname == "registry"
+      source: .service == "registry"
   - name: "coresmd_coredns"
     condition:
       type: vrl
-      source: .appname == "coresmd-coredns"
+      source: .service == "coresmd-coredns"
   - name: "coresmd_coredhcp"
     condition:
       type: vrl
-      source: .appname == "coresmd-coredhcp"
+      source: .service == "coresmd-coredhcp"
   - name: "smd"
     condition:
       type: vrl
-      source: .appname == "smd"
+      source: .service == "smd"
   - name: "hydra"
     condition:
       type: vrl
-      source: .appname == "hydra"
+      source: .service == "hydra"
   - name: "opaal"
     condition:
       type: vrl
-      source: .appname == "opaal"
+      source: .service == "opaal"
   - name: "step_ca"
     condition:
       type: vrl
-      source: .appname == "step-ca"
+      source: .service == "step-ca"
   - name: "cloud_init_server"
     condition:
       type: vrl
-      source: .appname == "cloud-init-server"
+      source: .service == "cloud-init-server"

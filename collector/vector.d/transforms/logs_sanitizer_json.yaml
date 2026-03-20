@@ -6,8 +6,8 @@ type: remap
 inputs:
   - logs_exclusiverouter.opaal
 source: |-
-  if .message != "" {
-    result, error = parse_json(string!(.message))
+  if .msg != "" {
+    result, error = parse_json(string!(.msg))
     if error == null {
       .data = result
     } else {

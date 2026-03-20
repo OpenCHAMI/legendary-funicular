@@ -12,8 +12,8 @@ inputs:
   - logs_exclusiverouter.step_ca
   - logs_exclusiverouter.cloud_init_server
 source: |-
-  if .message != "" {
-    result, .parse_error = parse_logfmt(string!(.message))
+  if .msg != "" {
+    result, .parse_error = parse_logfmt(string!(.msg))
     if .parse_error == null {
       .data = result
     }

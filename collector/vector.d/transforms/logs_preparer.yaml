@@ -6,6 +6,19 @@ type: remap
 inputs:
   - syslog_udp_logs
 source: |
+  # perform common renames
+  .ts = .timestamp
+  del(.timestamp)
+
+  .service = .appname
+  del(.appname)
+
+  .level = .severity
+  del(.severity)
+
+  .msg = .message
+  del(.message)
+
   # prepare for parsing by creating defaults for parse error and parsed data storage
   # 
   # prepare all openchami-specific fields with null values
@@ -22,4 +35,4 @@ source: |
   .data = {}
 
   # remove nuisance ansi sequences...
-  .message = replace!(.message, r'(\x1b|\#033)\[[0-?]*[ -/]*[@-~]', "")
+  .msg = replace!(.msg, r'(\x1b|\#033)\[[0-?]*[ -/]*[@-~]', "")
