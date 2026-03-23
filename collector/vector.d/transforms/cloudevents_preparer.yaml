@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+type: remap
+inputs:
+  - http_cloudevents
+source: |
+  # migrate contex into tempvar to force semi-structured schema and avoid
+  # parquet column explosion from transient http headers
+  raw = .
+  . = {}
+  .raw = raw
+  
+  # prepare for parsing by creating expected schema with default values
+  .source_type = .raw.source_type
+  .ts = .raw.timestamp
+
+  .transport_method = null
+  .transport_metadata = {}
+
+  .cloudevent_binding = null
+  .cloudevent_id = null
+  .cloudevent_source = null
+  .cloudevent_type = null
+  .cloudevent_specversion = null
+  .cloudevent = {}
+  .cloudevent.data = {}
+
+  .xname = null
+  .component_id = null
+  .node_id = null
+  .request_user = null
+  .request_uri = null
+  .request_id = null
+  .trace_id = null
+
+  .parse_error = null

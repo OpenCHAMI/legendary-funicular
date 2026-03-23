@@ -4,27 +4,54 @@
 
 type: remap
 inputs:
-  - http_cloudevents
+  - cloudevents_sanitizer_http
+  - cloudevents_exclusiverouter._unmatched
 source: |
-  # extract all ce- headers into cloudevent object
-  .cloudevent = {}
-  for_each(.) -> |key, value| {
-    if starts_with(key, "ce-") {
-      # log(key, level: "error", rate_limit_secs: 0)
-      .cloudevent = set!(.cloudevent, [slice!(key, 3)], value)
-      result, err = remove(., [key])
-      if err == null {
-        . = result
-      }
-    }
+  ################################################################################
+  # Logical join point of the forked parsing paths above.
+  # At this stage, events may or may not have successfully produced
+  # structured fields. This transform performs a final, deterministic
+  # promotion pass to populate canonical root-level fields from nested
+  # structures.
+  ################################################################################
+
+  ################################################################################
+  # HOPEFUL PHASE (i.e., check previous transform results for missing fields)
+  ################################################################################
+  # ROOT-LEVEL CLOUDEVENT FIELDS
+  # cloudevent_id
+  if is_null(.cloudevent_id) && exists(.cloudevent.id) && !is_null(.cloudevent.id) {
+    .cloudevent_id = .cloudevent.id
   }
-  if .message != "" {
-    body = parse_json!(string!(.message))
-    if exists(body.data) {
-      .cloudevent.data = del(body.data)
-      .cloudevent = merge!(.cloudevent, body)
-    } else {
-      .cloudevent.data = body
-    }
+  # cloudevent_source
+  if is_null(.cloudevent_source) && exists(.cloudevent.source) && !is_null(.cloudevent.source) {
+    .cloudevent_source = .cloudevent.source
   }
-  del(.message)
+  # cloudevent_type
+  if is_null(.cloudevent_type) && exists(.cloudevent.type) && !is_null(.cloudevent.type) {
+    .cloudevent_type = .cloudevent.type
+  }
+  # cloudevent_specversion
+  if is_null(.cloudevent_specversion) && exists(.cloudevent.specversion) && !is_null(.cloudevent.specversion) {
+    .cloudevent_specversion = .cloudevent.specversion
+  }
+
+  # last ditch parse error assignment for the unmatched routing case where no
+  # sanitization (and implicitly no field population from nested structs)
+  # occurred
+  if is_null(.transport_method) && is_null(.parse_error) {
+    # todo: parse error should probably be a list since multiple parsings are
+    # possible along any given path... we should come up with a error schema that
+    # simplifies tracing before this leaves the prototype stage.
+    .parse_error = "no sanitization path for the received cloudevent exists"
+  }
+
+  ################################################################################
+  # UNIFORMITY PHASE
+  #
+  # json encode all nested structures with transient fields to prevent parquet
+  # column explosion
+  ################################################################################
+  .transport_metadata = encode_json(.transport_metadata)
+  .cloudevent = encode_json(.cloudevent)
+  .raw = encode_json(.raw)

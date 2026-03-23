@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+
+type: exclusive_route
+inputs:
+  - cloudevents_preparer
+# target services with potentially parsible message formats (even if intermittent)
+# unspecified services are implicitly tossed into the "_unmatched" route
+routes:
+  - name: "http"
+    condition:
+      type: vrl
+      source: .source_type == "http_server"

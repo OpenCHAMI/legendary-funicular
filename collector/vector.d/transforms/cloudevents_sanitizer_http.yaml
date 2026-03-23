@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: MIT
+type: remap
+inputs:
+  - cloudevents_exclusiverouter.http
+source: |
+  # root = .raw
+  root = object!(.raw)
+
+
+  # parse http transport metadata
+  .transport_method = "http"
+
+  value = get!(root, ["accept-encoding"])
+  if !is_null(value) {
+    .transport_metadata.accept_encoding = value
+  }
+  value = get!(root, ["content-length"])
+  if !is_null(value) {
+    .transport_metadata.content_length = value
+  }
+  value = get!(root, ["content-type"])
+  if !is_null(value) {
+    .transport_metadata.content_type = value
+  }
+  value = get!(root, ["user-agent"])
+  if !is_null(value) {
+    .transport_metadata.user_agent = value
+  }
+  if exists(root.host) {
+    .transport_metadata.host = root.host
+  }
+  if exists(root.path) {
+    .transport_metadata.path = root.path
+  }
+
+
+  # extract all ce- headers into cloudevent object
+  is_binding_binary = false
+  for_each(root) -> |key, value| {
+    if starts_with(key, "ce-") {
+      .cloudevent = set!(.cloudevent, [slice!(key, 3)], value)
+      is_binding_binary = true
+    }
+  }
+
+  if is_binding_binary {
+    .cloudevent_binding = "binary"
+  } else {
+    .cloudevent_binding = "structured"
+  }
+
+  if root.message != "" {
+    body = parse_json!(string!(root.message))
+    if exists(body.data) {
+      .cloudevent.data = del(body.data)
+      .cloudevent = merge!(.cloudevent, body)
+    } else {
+      .cloudevent.data = body
+    }
+  }
