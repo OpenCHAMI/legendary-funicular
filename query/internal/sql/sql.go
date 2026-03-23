@@ -69,6 +69,16 @@ func (e *Engine) Close() error {
 	return e.Pool.Close()
 }
 
+// todo: after prototype completion, gut this entire routine into parts
+// and spread the pieces to more appropriate places. the entire routine
+// is now too domain specific. internal libs should have no knowledge
+// of sources, streams, or really any concrete type info. it goes against
+// the spirit of the original design of this subproject (favor simplicity
+// and extendability). also, given the nature of this routine, it would
+// fit in better in the cmd/query/query.go package.
+//
+// also some of the code below is just outright prototype quality garbage...
+//
 // todo: another candidate for a grammar/formal parser
 // might be able to find an existing duckdb grammar online to save time...
 func (e *Engine) prepareQuerystr(querystr string, sources []string) (string, error) {
@@ -84,11 +94,35 @@ func (e *Engine) prepareQuerystr(querystr string, sources []string) (string, err
 	if pt < 0 {
 		return querystr, errors.New("invalid SQL query")
 	}
+
+	// although this mess allows us to ensure no double json encoding occurs on the target
+	// unstructured data column (and implicitly enable pretty-print for it), it doesn't,
+	// readily enable querying or specifying clauses w.r.t. the internal fields.
+	//
+	// we may be approaching the limit of hiding internal behaviors w.r.t. the
+	// unstructured data and duckdb. users using the `sql` subcommand may need to learn
+	// elements of the duckdb sql dialect if those behaviors are needed. for example:
+	// `go run . -s events sql "select * from SOURCES where json_extract_string(cloudevent, '$.specversion') == '1.0'" | jq`
+
+	// if strings.Contains(s, "*") {
+	// 	querystr = strings.Replace(querystr, "*", "* exclude(data), json(data) as data", 1)
+	// } else if strings.Contains(s, "data") {
+	// 	querystr = strings.Replace(querystr, "data", "json(data) as data", 1)
+	// }
+
+	expansionField := "data" // default to syslog schema expectation
+	for _, source := range sources {
+		if strings.Contains(strings.ToLower(source), "events") {
+			expansionField = "cloudevent"
+		}
+	}
+
+	// todo: fix mess, refactor/revise
 	s = s[:pt]
 	if strings.Contains(s, "*") {
-		querystr = strings.Replace(querystr, "*", "* exclude(data), json(data) as data", 1)
-	} else if strings.Contains(s, "data") {
-		querystr = strings.Replace(querystr, "data", "json(data) as data", 1)
+		querystr = strings.Replace(querystr, "*", fmt.Sprintf("* exclude(%s), json(%s) as %s", expansionField, expansionField, expansionField), 1)
+	} else if strings.Contains(s, expansionField) {
+		querystr = strings.Replace(querystr, expansionField, fmt.Sprintf("json(%s) as %s", expansionField, expansionField), 1)
 	}
 
 	if strings.Contains(querystr, QueryPlaceholderSources) {
