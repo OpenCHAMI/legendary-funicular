@@ -6,6 +6,11 @@ type: remap
 inputs:
   - syslog_udp_logs
 source: |
+  # todo: convert to rigid schema with unstructured jsonstr columns
+  # in a manner similar to the new cloudevents schema. keep fields
+  # required by the syslog protocol in the root context, with remaining
+  # fields placed in the appropriate nested structures
+
   # perform common renames
   .ts = .timestamp
   del(.timestamp)
