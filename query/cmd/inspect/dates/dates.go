@@ -8,7 +8,6 @@ package dates
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
 	"github.com/OpenCHAMI/legendary-funicular/query/cmd/query"
@@ -22,11 +21,11 @@ func NewCmd(cfg *config.Config) *cobra.Command {
 		Short: "List available dates",
 		Long:  "List available dates with captures available in the log lake.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			options := opts.FromCobraCmd(cmd)
-			querystr, err := buildQueryString(options)
-			if err != nil {
-				return err
-			}
+			querystr := `
+SELECT DISTINCT
+	CAST(ts AS DATE) AS date
+FROM SOURCES
+ORDER BY date`
 			return query.ExecStructured(
 				querystr,
 				context.TODO(),
@@ -48,24 +47,4 @@ func scanner(rows *sql.Rows) (record, error) {
 	var record record
 	err := rows.Scan(&record.Date)
 	return record, err
-}
-
-func buildQueryString(options opts.Opts) (string, error) {
-	var expr string
-
-	switch options.Stream {
-	case "events":
-		expr = "cloudevent.ts"
-	case "logs":
-		expr = "ts"
-	default:
-		return expr, fmt.Errorf("unknown source: %s", options.Stream)
-	}
-
-	return fmt.Sprintf(`
-SELECT DISTINCT
-	CAST(%s AS DATE) AS date
-FROM SOURCES
-ORDER BY date
-			`, expr), nil
 }
