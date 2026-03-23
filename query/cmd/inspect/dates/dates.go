@@ -53,13 +53,13 @@ func scanner(rows *sql.Rows) (record, error) {
 func buildQueryString(options opts.Opts) (string, error) {
 	var expr string
 
-	switch options.Source {
+	switch options.Stream {
 	case "events":
 		expr = "cloudevent.ts"
 	case "logs":
 		expr = "ts"
 	default:
-		return expr, fmt.Errorf("unknown source: %s", options.Source)
+		return expr, fmt.Errorf("unknown source: %s", options.Stream)
 	}
 
 	return fmt.Sprintf(`
