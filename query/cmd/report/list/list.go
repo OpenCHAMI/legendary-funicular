@@ -46,7 +46,7 @@ func run(options opts.Opts) error {
 	if err != nil {
 		return err
 	}
-	defer enc.Close()
+	defer enc.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	for _, r := range items {
 		rec := record{Name: r.Name(), Description: r.Description()}

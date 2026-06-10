@@ -12,13 +12,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/parquet-go/parquet-go"
 	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/aws/config"
 	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/aws/s3/bucket"
 	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/pipeline"
 	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/record"
 	"github.com/OpenCHAMI/legendary-funicular/compactor/internal/zio"
+	"github.com/google/uuid"
+	"github.com/parquet-go/parquet-go"
 )
 
 func checkErr(err error, shouldExit bool) {
@@ -74,7 +74,11 @@ func cvtS3Objects2Parquet[T record.Record](
 
 	var objectsSink []string
 	writer := parquet.NewGenericWriter[T](out, parquet.Compression(&parquet.Zstd))
-	defer writer.Close()
+	defer func() {
+		if err := writer.Close(); err != nil {
+			slog.Warn(fmt.Sprintf("failed to close parquet writer: %s", err))
+		}
+	}()
 
 	for _, key := range keys {
 		i, err := source.Open(ctx, key)

@@ -76,7 +76,9 @@ func (b *Bucket) Read(
 		return nil, err
 	}
 
-	defer stream.Close()
+	defer func() {
+		_ = stream.Close() // Already read to completion or error
+	}()
 	data, err := io.ReadAll(stream)
 	if err != nil {
 		return nil, err
@@ -109,13 +111,19 @@ func (b *Bucket) SpooledPut(ctx context.Context, key string, stream io.Reader) (
 	if err != nil {
 		return 0, err
 	}
-	defer spool.Close()
-	defer os.Remove(spool.Name())
+	defer func() {
+		_ = spool.Close() // Best effort cleanup
+	}()
+	defer func() {
+		_ = os.Remove(spool.Name()) //nolint:errcheck // Best effort cleanup
+	}()
 
 	n, err := io.Copy(spool, stream)
 	if err != nil {
 		return n, err
 	}
-	spool.Seek(0, io.SeekStart)
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return n, err
+	}
 	return n, b.Put(ctx, key, spool)
 }

@@ -25,7 +25,7 @@ source: |
   del(.message)
 
   # prepare for parsing by creating defaults for parse error and parsed data storage
-  # 
+  #
   # prepare all openchami-specific fields with null values
   # with our current service logs, AFAIK it is not possible to grab these
   # fields as they aren't attached to anything... so this is future prep

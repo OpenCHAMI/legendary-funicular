@@ -11,7 +11,7 @@ source: |
   raw = .
   . = {}
   .raw = raw
-  
+
   # prepare for parsing by creating expected schema with default values
   .source_type = .raw.source_type
   .ts = .raw.timestamp

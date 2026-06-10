@@ -40,7 +40,9 @@ func compaction[T record.Record](
 
 	// S3 Reader
 	wg.Go(func() {
-		defer pipeWrite.Close()
+		defer func() {
+			_ = pipeWrite.Close() // Reader will see EOF or broken pipe
+		}()
 		defer close(keyCh)
 		defer close(producerErrCh)
 
@@ -56,7 +58,9 @@ func compaction[T record.Record](
 
 	// S3 Writer
 	wg.Go(func() {
-		defer pipeRead.Close()
+		defer func() {
+			_ = pipeRead.Close() // Already reading to completion or error
+		}()
 		defer close(consumerErrCh)
 
 		key := buildObjectKey(prefix)
