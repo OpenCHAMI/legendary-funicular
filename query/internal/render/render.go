@@ -80,7 +80,7 @@ func Render(w io.Writer, f string, v any) error {
 	if err != nil {
 		return err
 	}
-	defer enc.Close()
+	defer enc.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer {

@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
+	_ "github.com/duckdb/duckdb-go/v2"
 )
 
 const QueryPlaceholderSources = "SOURCES"

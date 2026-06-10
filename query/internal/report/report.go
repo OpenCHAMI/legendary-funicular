@@ -56,8 +56,8 @@ FROM (
 //   - can't assume each slice element is a simple pair (e.g., value could be
 //     a quoted sentence, a list, or a conditional expression)
 //   - may require a grammar/lexer rather than naive strings.Split("=")
-//   - likely will require escape characters (e.g., "\=") when special 
-// 	   characters occur in the value component.
+//   - likely will require escape characters (e.g., "\=") when special
+//     characters occur in the value component.
 func ParseRawParams(raw []string) (map[string]any, error) {
 	slog.Warn("ParseRawParams still requires a proper grammar definition for safe argument parsing and will fail if provided a non-empty slice")
 	params := make(map[string]any)

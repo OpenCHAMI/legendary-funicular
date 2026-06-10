@@ -32,7 +32,7 @@ func NewR(i io.ReadCloser, transforms ...TransformR) (*PipelineReadCloser, error
 
 func (iop *PipelineReadCloser) Close() {
 	for _, s := range slices.Backward(iop.stages) {
-		s.Close() // squelch errors... for now
+		_ = s.Close() //nolint:errcheck // Best effort cleanup
 	}
 	iop.stages = make([]io.ReadCloser, 0)
 }

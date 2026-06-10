@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
+# SPDX-License-Identifier: MIT
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+
+- repo: https://github.com/fsfe/reuse-tool
+  rev: v5.1.1
+  hooks:
+    - id: reuse-lint-file
+
+# Custom local hooks
+-   repo: local
+    hooks:
+    -   id: go-fmt-write-compactor
+        name: gofmt (write) - compactor
+        entry: bash -c 'cd compactor && gofmt -w .'
+        language: system
+        files: '^compactor/.*\.go$'
+        pass_filenames: false
+
+    -   id: go-fmt-write-query
+        name: gofmt (write) - query
+        entry: bash -c 'cd query && gofmt -w .'
+        language: system
+        files: '^query/.*\.go$'
+        pass_filenames: false
+
+    -   id: go-mod-tidy-compactor
+        name: go mod tidy - compactor
+        entry: bash -c 'cd compactor && go mod tidy'
+        language: system
+        pass_filenames: false
+        files: '^compactor/(go\.(mod|sum)|.*\.go)$'
+
+    -   id: go-mod-tidy-query
+        name: go mod tidy - query
+        entry: bash -c 'cd query && go mod tidy'
+        language: system
+        pass_filenames: false
+        files: '^query/(go\.(mod|sum)|.*\.go)$'
+
+    -   id: go-vet-compactor
+        name: go vet - compactor
+        entry: bash -c 'cd compactor && go vet -mod=mod ./...'
+        language: system
+        pass_filenames: false
+        files: '^compactor/.*\.go$'
+
+    -   id: go-vet-query
+        name: go vet - query
+        entry: bash -c 'cd query && go vet -mod=mod ./...'
+        language: system
+        pass_filenames: false
+        files: '^query/.*\.go$'
+
+    -   id: golangci-lint-compactor
+        name: golangci-lint - compactor
+        entry: bash -c 'cd compactor && golangci-lint run --fix'
+        language: system
+        pass_filenames: false
+        files: '^compactor/.*\.go$'
+
+    -   id: golangci-lint-query
+        name: golangci-lint - query
+        entry: bash -c 'cd query && golangci-lint run --fix'
+        language: system
+        pass_filenames: false
+        files: '^query/.*\.go$'
+
+    -   id: go-test-compactor
+        name: go test - compactor
+        entry: bash -c 'cd compactor && go test -mod=readonly -race ./...'
+        language: system
+        pass_filenames: false
+        files: '^compactor/.*\.go$'
+
+    -   id: go-test-query
+        name: go test - query
+        entry: bash -c 'cd query && go test -mod=readonly -race ./...'
+        language: system
+        pass_filenames: false
+        files: '^query/.*\.go$'

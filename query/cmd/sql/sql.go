@@ -8,8 +8,8 @@ package sql
 import (
 	"context"
 
-	"github.com/OpenCHAMI/legendary-funicular/query/cmd/query"
 	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
+	"github.com/OpenCHAMI/legendary-funicular/query/cmd/query"
 	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
 	"github.com/spf13/cobra"
 )

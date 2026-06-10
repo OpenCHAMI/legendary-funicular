@@ -26,13 +26,13 @@ func ExecUnstructured(
 	if err != nil {
 		return err
 	}
-	defer engine.Close()
+	defer engine.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	enc, err := render.BuildEncoder(options.Output, options.Format)
 	if err != nil {
 		return err
 	}
-	defer enc.Close()
+	defer enc.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	// todo: handle semi-structured case where the faster scanner is
 	// applicable (e.g., the case where we can trust the output).
@@ -40,7 +40,7 @@ func ExecUnstructured(
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	for rows.Next() {
 		// todo: handle semi-structured case where the faster scanner is
@@ -72,19 +72,19 @@ func ExecStructured[T any](
 	if err != nil {
 		return err
 	}
-	defer engine.Close()
+	defer engine.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	enc, err := render.BuildEncoder(options.Output, options.Format)
 	if err != nil {
 		return err
 	}
-	defer enc.Close()
+	defer enc.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	rows, err := engine.Query(querystr, sources, false)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck // error on close in defer is non-critical
 
 	for rows.Next() {
 		record, err := scanner(rows)
