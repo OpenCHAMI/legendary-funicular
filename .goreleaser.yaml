@@ -70,7 +70,6 @@ dockers_v2:
   - id: "compactor"
     ids:
       - "compactor"
-    use: buildx
     images:
       - "ghcr.io/openchami/openchami-logq-compactor"
     tags:
@@ -86,17 +85,16 @@ dockers_v2:
     platforms:
       - "linux/amd64"
       - "linux/arm64"
+    flags:
+      - "--pull"
     extra_files:
       - "LICENSES/MIT.txt"
       - "README.md"
     dockerfile: "compactor/Dockerfile"
-    build_flag_templates:
-      - "--pull"
 
   - id: "query"
     ids:
       - "query"
-    use: buildx
     images:
       - "ghcr.io/openchami/openchami-logq-query"
     tags:
@@ -112,12 +110,12 @@ dockers_v2:
     platforms:
       - "linux/amd64"
       - "linux/arm64"
+    flags:
+      - "--pull"
     extra_files:
       - "LICENSES/MIT.txt"
       - "README.md"
     dockerfile: "query/Dockerfile"
-    build_flag_templates:
-      - "--pull"
 
 archives:
   - id: "compactor"
