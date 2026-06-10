@@ -69,11 +69,15 @@ jobs:
         run: |
           echo "const fs = require('fs');" > process.js
           echo 'const artifacts = ${{ steps.goreleaser.outputs.artifacts }}' >> process.js
-          echo "const firstNonNullDigest = artifacts.find(artifact => artifact.extra && artifact.extra.Digest != null)?.extra.Digest;" >> process.js
-          echo "console.log(firstNonNullDigest);" >> process.js
-          echo "fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
+          echo "const compactorArtifact = artifacts.find(artifact => artifact.name && artifact.name.includes('compactor') && artifact.extra && artifact.extra.Digest);" >> process.js
+          echo "const queryArtifact = artifacts.find(artifact => artifact.name && artifact.name.includes('query') && artifact.extra && artifact.extra.Digest);" >> process.js
+          echo "console.log('Compactor digest:', compactorArtifact?.extra.Digest);" >> process.js
+          echo "console.log('Query digest:', queryArtifact?.extra.Digest);" >> process.js
+          echo "if (compactorArtifact) fs.writeFileSync('compactor-digest.txt', compactorArtifact.extra.Digest);" >> process.js
+          echo "if (queryArtifact) fs.writeFileSync('query-digest.txt', queryArtifact.extra.Digest);" >> process.js
           node process.js
-          echo "digest=$(cat digest.txt)" >> $GITHUB_OUTPUT
+          echo "compactor_digest=$(cat compactor-digest.txt)" >> $GITHUB_OUTPUT
+          echo "query_digest=$(cat query-digest.txt)" >> $GITHUB_OUTPUT
       - name: Attest binaries
         uses: actions/attest-build-provenance@v1
         with:
@@ -82,11 +86,11 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ghcr.io/openchami/openchami-logq-compactor
-          subject-digest: ${{ steps.process_goreleaser_output.outputs.digest }}
+          subject-digest: ${{ steps.process_goreleaser_output.outputs.compactor_digest }}
           push-to-registry: true
       - name: generate build provenance for query container
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ghcr.io/openchami/openchami-logq-query
-          subject-digest: ${{ steps.process_goreleaser_output.outputs.digest }}
+          subject-digest: ${{ steps.process_goreleaser_output.outputs.query_digest }}
           push-to-registry: true
