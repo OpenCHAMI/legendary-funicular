@@ -74,14 +74,10 @@ jobs:
           echo "fs.writeFileSync('digest.txt', firstNonNullDigest);" >> process.js
           node process.js
           echo "digest=$(cat digest.txt)" >> $GITHUB_OUTPUT
-      - name: Attest compactor binary
+      - name: Attest binaries
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: dist/openchami-logq-compactor_*/*
-      - name: Attest query binary
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: dist/openchami-logq-query_*/*
+          subject-path: dist/**
       - name: generate build provenance for compactor container
         uses: actions/attest-build-provenance@v1
         with:
