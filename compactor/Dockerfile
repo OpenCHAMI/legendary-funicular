@@ -8,7 +8,10 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
-COPY openchami-logq-compactor /app/openchami-logq-compactor
+ARG TARGETPLATFORM
+
+# With GoReleaser dockers_v2, binaries are available under $TARGETPLATFORM/.
+COPY $TARGETPLATFORM/openchami-logq-compactor /app/openchami-logq-compactor
 
 # Create a non-root user
 RUN addgroup -g 1000 compactor && \

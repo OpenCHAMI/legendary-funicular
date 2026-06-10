@@ -8,7 +8,10 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
-COPY openchami-logq-query /app/openchami-logq-query
+ARG TARGETPLATFORM
+
+# With GoReleaser dockers_v2, binaries are available under $TARGETPLATFORM/.
+COPY $TARGETPLATFORM/openchami-logq-query /app/openchami-logq-query
 
 # Create a non-root user
 RUN addgroup -g 1000 query && \
