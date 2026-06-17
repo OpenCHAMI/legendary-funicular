@@ -6,330 +6,302 @@ SPDX-License-Identifier: MIT
 
 # User Guide
 
-Advanced usage guide for openchami-logq. For basic usage and installation, see the [main README](../README.md).
+Advanced usage guide for openchami-logq. For installation and basic usage, see the [main README](../README.md).
 
 ## Table of Contents
 
-1. [Advanced SQL Examples](#advanced-sql-examples)
-2. [DuckDB Best Practices](#duckdb-best-practices)
-3. [FAQ](#faq)
+1. [Understanding SOURCES](#understanding-sources)
+2. [Schema and Fields](#schema-and-fields)
+3. [JSON Field Extraction](#json-field-extraction)
+4. [DuckDB Best Practices](#duckdb-best-practices)
+5. [FAQ](#faq)
 
 ---
 
-## Advanced SQL Examples
+## Understanding SOURCES
 
-### Window Functions
+### What is SOURCES?
 
-Calculate running totals:
+`SOURCES` is a placeholder that gets replaced with actual S3 paths to your log files.
+
+**Example:**
+```sql
+-- You write:
+SELECT * FROM SOURCES WHERE ts > '2026-06-10'
+
+-- Query engine converts to:
+SELECT * FROM read_parquet([
+  's3://openchami-logs-daily/logs/2026-06-10.parquet',
+  's3://openchami-logs-daily/logs/2026-06-11.parquet',
+  ...
+])
+WHERE ts > '2026-06-10'
+```
+
+### Scope Control
+
+Control which data SOURCES points to:
+
+```bash
+# Query compacted Parquet files (fast, default)
+openchami-logq-query sql --scope compacted "SELECT * FROM SOURCES"
+
+# Query raw NDJSON files (recent data, slower)
+openchami-logq-query sql --scope raw "SELECT * FROM SOURCES"
+
+# Query both raw and compacted (complete data)
+openchami-logq-query sql --scope all "SELECT * FROM SOURCES"
+```
+
+**When to use each:**
+- `compacted`: Default for most queries (fast, data older than 1 day)
+- `raw`: Recent data not yet compacted (last 24 hours)
+- `all`: Complete historical analysis (slower)
+
+### Stream Selection
+
+Query different log types:
+
+```bash
+# Query syslog data (default)
+openchami-logq-query sql --stream logs "SELECT * FROM SOURCES"
+
+# Query CloudEvents data
+openchami-logq-query sql --stream events "SELECT * FROM SOURCES"
+
+# Query both
+openchami-logq-query sql --stream logs,events "SELECT * FROM SOURCES"
+```
+
+---
+
+## Schema and Fields
+
+### Inspect Your Schema
+
+See what fields are available:
+
+```bash
+openchami-logq-query inspect schema --stream logs
+```
+
+**Example output:**
+```
+┌────────────┬─────────┬─────────┬─────────┬─────────┬─────────┐
+│ column_name│ column_type│ null│ key│ default│ extra│
+├────────────┼─────────┼─────────┼─────────┼─────────┼─────────┤
+│ ts         │ TIMESTAMP│ YES  │     │         │         │
+│ host       │ VARCHAR  │ YES  │     │         │         │
+│ level      │ VARCHAR  │ YES  │     │         │         │
+│ msg        │ VARCHAR  │ YES  │     │         │         │
+│ data       │ JSON     │ YES  │     │         │         │
+└────────────┴─────────┴─────────┴─────────┴─────────┴─────────┘
+```
+
+### Common Fields
+
+**Syslog logs:**
+- `ts` (TIMESTAMP): Log timestamp
+- `host` (VARCHAR): Hostname
+- `level` (VARCHAR): Log level (INFO, ERROR, WARN, DEBUG)
+- `msg` (VARCHAR): Log message
+- `data` (JSON): Additional fields
+
+**CloudEvents:**
+- `ts` (TIMESTAMP): Event time
+- `source` (VARCHAR): Event source
+- `type` (VARCHAR): Event type
+- `specversion` (VARCHAR): CloudEvents version
+- `data` (JSON): Event payload
+
+### Handling Missing Fields
+
+Fields may be NULL if not present in the log:
+
+```sql
+-- Filter out NULLs
+SELECT * FROM SOURCES WHERE msg IS NOT NULL
+
+-- Provide defaults
+SELECT COALESCE(level, 'UNKNOWN') as level FROM SOURCES
+
+-- Count NULLs
+SELECT COUNT(*) - COUNT(msg) as null_messages FROM SOURCES
+```
+
+---
+
+## JSON Field Extraction
+
+Logs often contain nested JSON in the `data` field. DuckDB provides JSON functions to extract values.
+
+### Basic Extraction
+
+```sql
+-- Extract string value
+SELECT json_extract_string(data, '$.user') as user FROM SOURCES
+
+-- Extract numeric value
+SELECT json_extract(data, '$.count') as count FROM SOURCES
+
+-- Extract nested object
+SELECT json_extract(data, '$.metadata.tags') as tags FROM SOURCES
+```
+
+### Example: User Activity
+
+Given logs with this structure:
+```json
+{"ts": "2026-06-10T12:00:00Z", "data": {"user": "alice", "action": "login", "ip": "192.168.1.1"}}
+```
+
+Query:
 ```bash
 openchami-logq-query sql "
   SELECT
     ts,
-    host,
-    COUNT(*) OVER (PARTITION BY host ORDER BY ts) as running_count
+    json_extract_string(data, '$.user') as user,
+    json_extract_string(data, '$.action') as action,
+    json_extract_string(data, '$.ip') as ip
   FROM SOURCES
-  WHERE ts >= '2026-06-10'
-  ORDER BY ts"
-```
-
-Find the last error for each host:
-```bash
-openchami-logq-query sql "
-  SELECT * FROM (
-    SELECT
-      *,
-      ROW_NUMBER() OVER (PARTITION BY host ORDER BY ts DESC) as rn
-    FROM SOURCES
-    WHERE level = 'ERROR'
-  ) WHERE rn = 1"
-```
-
-### Common Table Expressions (CTEs)
-
-Multi-step analysis:
-```bash
-openchami-logq-query sql "
-  WITH error_counts AS (
-    SELECT host, COUNT(*) as errors
-    FROM SOURCES
-    WHERE level = 'ERROR'
-    GROUP BY host
-  ),
-  total_counts AS (
-    SELECT host, COUNT(*) as total
-    FROM SOURCES
-    GROUP BY host
-  )
-  SELECT
-    e.host,
-    e.errors,
-    t.total,
-    ROUND(100.0 * e.errors / t.total, 2) as error_rate
-  FROM error_counts e
-  JOIN total_counts t ON e.host = t.host
-  ORDER BY error_rate DESC"
-```
-
-### JSON Field Extraction
-
-Extract nested fields:
-```bash
-openchami-logq-query sql "
-  SELECT
-    json_extract_string(data, '$.user.name') as username,
-    json_extract_string(data, '$.user.id') as user_id,
-    json_extract(data, '$.metadata.tags') as tags,
-    COUNT(*) as count
-  FROM SOURCES
-  WHERE data IS NOT NULL
-  GROUP BY username, user_id, tags"
+  WHERE json_extract_string(data, '$.action') = 'login'
+  ORDER BY ts DESC
+  LIMIT 10"
 ```
 
 ### Array Operations
 
-Work with array fields:
-```bash
-openchami-logq-query sql "
-  SELECT
-    host,
-    UNNEST(json_extract(data, '$.errors')) as error
-  FROM SOURCES
-  WHERE json_extract(data, '$.errors') IS NOT NULL"
+Extract and expand arrays:
+
+```sql
+-- Unnest array into rows
+SELECT
+  host,
+  UNNEST(json_extract(data, '$.errors')) as error
+FROM SOURCES
+WHERE json_extract(data, '$.errors') IS NOT NULL
 ```
 
-### Date/Time Operations
+### JSON Path Syntax
 
-Group by custom intervals:
-```bash
-openchami-logq-query sql "
-  SELECT
-    DATE_TRUNC('minute', ts) as minute,
-    DATE_TRUNC('hour', ts) as hour,
-    DATE_TRUNC('day', ts) as day,
-    COUNT(*) as count
-  FROM SOURCES
-  WHERE ts >= NOW() - INTERVAL 7 DAY
-  GROUP BY minute, hour, day"
-```
+DuckDB uses JSONPath syntax:
 
-Calculate time differences:
-```bash
-openchami-logq-query sql "
-  SELECT
-    host,
-    ts,
-    LAG(ts) OVER (PARTITION BY host ORDER BY ts) as prev_ts,
-    EPOCH(ts - LAG(ts) OVER (PARTITION BY host ORDER BY ts)) as seconds_since_last
-  FROM SOURCES
-  WHERE level = 'ERROR'
-  ORDER BY host, ts"
-```
+- `$.field` - Top-level field
+- `$.nested.field` - Nested field
+- `$.array[0]` - Array element
+- `$.array[*]` - All array elements
 
-### String Operations
-
-Pattern matching and extraction:
-```bash
-openchami-logq-query sql "
-  SELECT
-    msg,
-    REGEXP_EXTRACT(msg, 'error code: ([0-9]+)', 1) as error_code,
-    REGEXP_MATCHES(msg, 'timeout|failed|error') as is_error
-  FROM SOURCES
-  WHERE msg IS NOT NULL
-  LIMIT 100"
-```
-
-### Aggregations
-
-Statistical functions:
-```bash
-openchami-logq-query sql "
-  SELECT
-    host,
-    COUNT(*) as count,
-    MIN(ts) as first_seen,
-    MAX(ts) as last_seen,
-    APPROX_COUNT_DISTINCT(msg) as unique_messages,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY LENGTH(msg)) as median_msg_length
-  FROM SOURCES
-  GROUP BY host"
-```
-
-### Cross-Stream Queries
-
-Join logs and events:
-```bash
-openchami-logq-query sql --stream logs,events "
-  SELECT
-    CASE
-      WHEN type IS NOT NULL THEN 'event'
-      ELSE 'log'
-    END as source_type,
-    COALESCE(type, level) as category,
-    COUNT(*) as count
-  FROM SOURCES
-  GROUP BY source_type, category
-  ORDER BY count DESC"
-```
+**Full reference:** [DuckDB JSON Functions](https://duckdb.org/docs/sql/functions/json)
 
 ---
 
 ## DuckDB Best Practices
 
-### 1. Always Use WHERE for Time Ranges
+### 1. Always Filter by Timestamp
 
-**Good:**
-```bash
-openchami-logq-query sql "
-  SELECT * FROM SOURCES
-  WHERE ts >= '2026-06-10' AND ts < '2026-06-11'"
+**Why:** Enables partition pruning - DuckDB skips entire Parquet files outside your time range.
+
+```sql
+-- Good: Filters files before reading
+SELECT * FROM SOURCES
+WHERE ts >= '2026-06-10' AND ts < '2026-06-11'
+
+-- Bad: Reads all files then filters
+SELECT * FROM SOURCES LIMIT 100
 ```
 
-**Why:** DuckDB can skip reading Parquet files outside the time range (partition pruning). This dramatically improves query performance.
+**Impact:** Can reduce query time from minutes to seconds.
 
-**Impact:** Can reduce query time from minutes to seconds for large datasets.
+### 2. Select Only Needed Columns
 
-### 2. Use LIMIT for Exploration
+**Why:** Columnar format means only selected columns are read from S3.
 
-**Good:**
-```bash
-# First, explore with LIMIT
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 100"
+```sql
+-- Good: Reads 2 columns
+SELECT ts, msg FROM SOURCES
 
-# Then, run full query if needed
-openchami-logq-query sql "SELECT * FROM SOURCES WHERE level='ERROR'"
+-- Bad: Reads all columns
+SELECT * FROM SOURCES
 ```
 
-**Why:** Avoid accidentally downloading gigabytes of data while exploring.
+**Impact:** Can reduce data transfer by 80%+.
 
-### 3. Select Only Needed Columns
+### 3. Use LIMIT for Exploration
 
-**Good:**
-```bash
-openchami-logq-query sql "SELECT ts, host, msg FROM SOURCES"
+**Why:** Prevents accidentally downloading gigabytes of data.
+
+```sql
+-- Good: Explore first
+SELECT * FROM SOURCES LIMIT 100
+
+-- Then: Run full query if needed
+SELECT * FROM SOURCES WHERE level='ERROR'
 ```
-
-**Bad:**
-```bash
-openchami-logq-query sql "SELECT * FROM SOURCES"
-```
-
-**Why:** DuckDB only reads the columns you select (columnar format). Selecting fewer columns = less data transferred from S3 = faster queries.
-
-**Impact:** Can reduce data transfer by 90%+ for wide tables.
 
 ### 4. Use NDJSON for Large Results
 
-**Good:**
+**Why:** Streaming format with constant memory usage.
+
 ```bash
+# Good: Stream large results
 openchami-logq-query sql --format ndjson "
   SELECT * FROM SOURCES" > large-results.ndjson
+
+# Process with jq
+cat large-results.ndjson | jq 'select(.level=="ERROR")'
 ```
 
-**Why:**
-- Streaming format with constant memory usage
-- Can process results line-by-line with `jq` or other tools
-- No need to load entire result set into memory
+### 5. Check Available Dates First
 
-**Impact:** Can query datasets larger than available RAM.
+**Why:** Avoid querying dates with no data.
 
-### 5. Use Built-in Reports
-
-**Good:**
-```bash
-openchami-logq-query report run find-all-service-errors
-```
-
-**Why:** Reports are:
-- Pre-tested and optimized
-- Documented with expected output
-- Consistent across users
-
-### 6. Check Available Dates First
-
-**Good:**
 ```bash
 # Check dates first
-openchami-logq-query inspect dates
+openchami-logq-query inspect dates --stream logs
 
 # Then query specific date
 openchami-logq-query sql "
   SELECT * FROM SOURCES WHERE ts >= '2026-06-10'"
 ```
 
-**Why:** Avoid querying dates with no data or querying more data than necessary.
+### 6. Use APPROX Functions for Large Datasets
 
-### 7. Use Environment Variables
+**Why:** Much faster, error rate typically <2%.
 
-**Good:**
-```bash
-# Set once
-export S3_ENDPOINT="http://localhost:7070"
-export S3_ACCESS_KEY="..."
-export S3_SECRET_KEY="..."
+```sql
+-- Good: Fast approximation
+SELECT APPROX_COUNT_DISTINCT(host) as approx_hosts FROM SOURCES
 
-# Use many times
-openchami-logq-query sql "SELECT * FROM SOURCES"
+-- Slower: Exact count
+SELECT COUNT(DISTINCT host) as exact_hosts FROM SOURCES
 ```
-
-**Why:** Don't repeat configuration on every command.
-
-### 8. Test Queries on Compacted Data First
-
-**Good:**
-```bash
-# Test on compacted data first (faster)
-openchami-logq-query sql --scope compacted "
-  SELECT * FROM SOURCES LIMIT 10"
-
-# Then query raw if needed
-openchami-logq-query sql --scope raw "
-  SELECT * FROM SOURCES WHERE ts > NOW() - INTERVAL 1 HOUR"
-```
-
-**Why:**
-- Compacted data (Parquet) is 10-20x faster to query than raw data (NDJSON)
-- Use raw data only for very recent logs (last few hours)
-
-### 9. Use APPROX Functions for Large Datasets
-
-**Good:**
-```bash
-openchami-logq-query sql "
-  SELECT APPROX_COUNT_DISTINCT(host) as approx_hosts FROM SOURCES"
-```
-
-**Better than:**
-```bash
-openchami-logq-query sql "
-  SELECT COUNT(DISTINCT host) as exact_hosts FROM SOURCES"
-```
-
-**Why:** APPROX functions are much faster and use less memory. Error rate is typically <2%.
-
-### 10. Optimize GROUP BY Order
-
-**Good:**
-```bash
-openchami-logq-query sql "
-  SELECT host, level, COUNT(*)
-  FROM SOURCES
-  GROUP BY host, level"  # host has higher cardinality
-```
-
-**Less optimal:**
-```bash
-openchami-logq-query sql "
-  SELECT level, host, COUNT(*)
-  FROM SOURCES
-  GROUP BY level, host"  # level has lower cardinality
-```
-
-**Why:** Grouping by high-cardinality columns first can improve query performance.
 
 ---
 
 ## FAQ
+
+### Q: What SQL functions can I use?
+
+**A:** All DuckDB SQL functions! This includes:
+- Aggregations: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `STDDEV`, etc.
+- Window functions: `ROW_NUMBER`, `RANK`, `LAG`, `LEAD`, etc.
+- String functions: `UPPER`, `LOWER`, `SUBSTRING`, `REGEXP_MATCHES`, etc.
+- Date functions: `DATE_TRUNC`, `DATE_ADD`, `DATE_DIFF`, etc.
+- JSON functions: `json_extract`, `json_extract_string`, etc.
+- Math functions: `ROUND`, `CEIL`, `FLOOR`, `ABS`, etc.
+
+**Full reference:** [DuckDB Functions](https://duckdb.org/docs/sql/functions/overview)
+
+### Q: Can I use window functions and CTEs?
+
+**A:** Yes! DuckDB supports full SQL including:
+- Window functions (`OVER` clauses)
+- Common Table Expressions (`WITH` clauses)
+- Subqueries
+- Joins (including self-joins)
+- `UNION`, `INTERSECT`, `EXCEPT`
+
+**Examples:** [DuckDB SQL Introduction](https://duckdb.org/docs/sql/introduction)
 
 ### Q: How do I query the last hour of logs?
 
@@ -339,7 +311,7 @@ openchami-logq-query sql --scope raw "
   WHERE ts > NOW() - INTERVAL 1 HOUR"
 ```
 
-Use `--scope raw` for recent data that hasn't been compacted yet.
+Use `--scope raw` for recent data not yet compacted.
 
 ### Q: How do I count errors by host?
 
@@ -355,25 +327,17 @@ openchami-logq-query sql "
 ### Q: How do I search for a specific message?
 
 ```bash
+# Case-sensitive
 openchami-logq-query sql "
   SELECT * FROM SOURCES
   WHERE msg LIKE '%timeout%'
   LIMIT 100"
-```
 
-For case-insensitive search:
-```bash
+# Case-insensitive
 openchami-logq-query sql "
   SELECT * FROM SOURCES
   WHERE LOWER(msg) LIKE '%timeout%'
   LIMIT 100"
-```
-
-### Q: How do I query both logs and events?
-
-```bash
-openchami-logq-query sql --stream logs,events "
-  SELECT * FROM SOURCES LIMIT 10"
 ```
 
 ### Q: How do I save results to a file?
@@ -406,16 +370,20 @@ openchami-logq-query sql "
 # Unique hosts
 openchami-logq-query sql "SELECT DISTINCT host FROM SOURCES"
 
-# Unique levels
-openchami-logq-query sql "SELECT DISTINCT level FROM SOURCES"
-
-# Count of unique values
+# Count unique values
 openchami-logq-query sql "SELECT COUNT(DISTINCT host) FROM SOURCES"
+
+# Unique values with counts
+openchami-logq-query sql "
+  SELECT host, COUNT(*) as count
+  FROM SOURCES
+  GROUP BY host
+  ORDER BY count DESC"
 ```
 
 ### Q: How do I join logs with external data?
 
-DuckDB can read external files directly in queries:
+DuckDB can read external CSV/JSON/Parquet files directly:
 
 ```bash
 openchami-logq-query sql "
@@ -428,139 +396,86 @@ openchami-logq-query sql "
   WHERE s.level = 'ERROR'"
 ```
 
+**Supported formats:** CSV, JSON, NDJSON, Parquet
+**Reference:** [DuckDB Data Import](https://duckdb.org/docs/data/overview)
+
 ### Q: How do I monitor query performance?
 
-Add timing with the `time` command:
-
 ```bash
+# Use time command
 time openchami-logq-query sql "SELECT COUNT(*) FROM SOURCES"
+
+# Output:
+# {"count":1000000}
+# real    0m2.341s
 ```
 
-Output:
-```
-{"count":1000000}
+For slow queries:
+1. Check data volume: `SELECT COUNT(*) FROM SOURCES`
+2. Add timestamp filter: `WHERE ts >= '2026-06-10'`
+3. Select fewer columns: `SELECT ts, msg` instead of `SELECT *`
+4. Use `EXPLAIN`: `EXPLAIN SELECT * FROM SOURCES`
 
-real    0m2.341s
-user    0m0.123s
-sys     0m0.045s
-```
+### Q: How do I handle very large result sets?
 
-### Q: Can I use all DuckDB functions?
-
-Yes! All DuckDB SQL functions are available:
+For results larger than available RAM:
 
 ```bash
-# Date functions
-openchami-logq-query sql "
-  SELECT DATE_TRUNC('hour', ts) as hour, COUNT(*)
-  FROM SOURCES GROUP BY hour"
-
-# String functions
-openchami-logq-query sql "
-  SELECT UPPER(host), LOWER(level) FROM SOURCES"
-
-# Math functions
-openchami-logq-query sql "
-  SELECT ROUND(AVG(LENGTH(msg)), 2) FROM SOURCES"
-
-# JSON functions
-openchami-logq-query sql "
-  SELECT json_extract_string(data, '$.key') FROM SOURCES"
-```
-
-See [DuckDB Functions](https://duckdb.org/docs/sql/functions/overview) for complete reference.
-
-### Q: How do I handle NULL values?
-
-```bash
-# Filter out NULLs
-openchami-logq-query sql "
-  SELECT * FROM SOURCES WHERE msg IS NOT NULL"
-
-# Replace NULLs with default
-openchami-logq-query sql "
-  SELECT COALESCE(msg, 'no message') as message FROM SOURCES"
-
-# Count NULLs
-openchami-logq-query sql "
-  SELECT
-    COUNT(*) as total,
-    COUNT(msg) as non_null_msg,
-    COUNT(*) - COUNT(msg) as null_msg
-  FROM SOURCES"
-```
-
-### Q: How do I debug slow queries?
-
-1. **Check how much data you're scanning:**
-```bash
-openchami-logq-query sql "
-  SELECT COUNT(*), MIN(ts), MAX(ts) FROM SOURCES"
-```
-
-2. **Add WHERE clause to limit time range:**
-```bash
-# Bad: scans all data
-openchami-logq-query sql "SELECT * FROM SOURCES WHERE level='ERROR'"
-
-# Good: scans only one day
-openchami-logq-query sql "
-  SELECT * FROM SOURCES
-  WHERE ts >= '2026-06-10' AND level='ERROR'"
-```
-
-3. **Select fewer columns:**
-```bash
-# Bad: reads all columns
-openchami-logq-query sql "SELECT * FROM SOURCES"
-
-# Good: reads only needed columns
-openchami-logq-query sql "SELECT ts, host, msg FROM SOURCES"
-```
-
-4. **Use EXPLAIN to see query plan:**
-```bash
-openchami-logq-query sql "
-  EXPLAIN SELECT * FROM SOURCES WHERE ts >= '2026-06-10'"
-```
-
-### Q: How do I query very large result sets?
-
-For result sets larger than available RAM:
-
-1. **Use NDJSON format** (streaming):
-```bash
+# 1. Use NDJSON format (streaming)
 openchami-logq-query sql --format ndjson "
   SELECT * FROM SOURCES" | jq -c 'select(.level=="ERROR")'
-```
 
-2. **Process in chunks** with LIMIT/OFFSET:
-```bash
-# Process 10,000 rows at a time
-for offset in 0 10000 20000 30000; do
-  openchami-logq-query sql "
-    SELECT * FROM SOURCES
-    LIMIT 10000 OFFSET $offset" >> results.ndjson
-done
-```
-
-3. **Use aggregate queries** to reduce data:
-```bash
-# Instead of downloading all rows, aggregate first
+# 2. Use aggregation to reduce data
 openchami-logq-query sql "
   SELECT host, level, COUNT(*), MIN(ts), MAX(ts)
   FROM SOURCES
   GROUP BY host, level"
+
+# 3. Process in batches with LIMIT/OFFSET
+for offset in 0 10000 20000; do
+  openchami-logq-query sql "
+    SELECT * FROM SOURCES LIMIT 10000 OFFSET $offset"
+done
+```
+
+### Q: What if I get "S3 access denied"?
+
+```bash
+# 1. Check credentials
+aws s3 ls s3://openchami-logs-daily --endpoint-url=$S3_ENDPOINT
+
+# 2. Verify configuration
+openchami-logq-query inspect config
+
+# 3. Check environment variables
+echo $S3_ENDPOINT
+echo $S3_ACCESS_KEY
+```
+
+### Q: Can I use this with BI tools?
+
+Yes! Export to formats that BI tools understand:
+
+```bash
+# Export to CSV
+openchami-logq-query sql "
+  SELECT * FROM SOURCES WHERE level='ERROR'" \
+  | jq -r '(.[0] | keys_unsorted) as $keys | $keys, map([.[ $keys[] ]])[] | @csv' \
+  > errors.csv
+
+# Export to Parquet (via DuckDB CLI)
+duckdb -c "
+  COPY (SELECT * FROM SOURCES WHERE level='ERROR')
+  TO 'errors.parquet' (FORMAT PARQUET)"
 ```
 
 ---
 
 ## Next Steps
 
-- **[Main README](../README.md)** - Installation and basic usage
-- **[Architecture Guide](ARCHITECTURE.md)** - System design and technical details
-- **[Operations Guide](OPERATIONS.md)** - Production deployment and operations
-- **[Developer Guide](DEVELOPMENT.md)** - Contributing and development setup
+- **[Architecture Guide](ARCHITECTURE.md)** - Understand system design
+- **[Operations Guide](OPERATIONS.md)** - Deploy and operate
+- **[Developer Guide](DEVELOPMENT.md)** - Contribute to the project
 
 ---
 

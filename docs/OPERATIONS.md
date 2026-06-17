@@ -11,7 +11,7 @@ Practical deployment and operations guide for openchami-logq.
 ## Table of Contents
 
 1. [Deployment](#deployment)
-2. [Configuration Management](#configuration-management)
+2. [Configuration](#configuration)
 3. [Monitoring](#monitoring)
 4. [Troubleshooting](#troubleshooting)
 5. [Maintenance](#maintenance)
@@ -20,47 +20,37 @@ Practical deployment and operations guide for openchami-logq.
 
 ## Deployment
 
-### Architecture Overview
-
-```
-┌─────────────┐
-│  Collector  │──> S3 Raw Bucket
-│  (Vector)   │
-└─────────────┘
-                    ┌──────────────┐
-                    │  Compactor   │──> S3 Compacted Bucket
-                    │  (Cron Job)  │
-                    └──────────────┘
-                                        ┌──────────────┐
-                                        │    Query     │
-                                        │    (CLI)     │
-                                        └──────────────┘
-```
-
 ### Prerequisites
 
 **Infrastructure:**
-- S3-compatible storage (VersityGW, MinIO, or AWS S3)
-- Linux server with systemd or Podman
-- IAM users with appropriate permissions
+- S3-compatible storage ([VersityGW](https://github.com/versity/versitygw), [MinIO](https://min.io/), or AWS S3)
+- Linux server with systemd or Docker
+- IAM users with appropriate permissions (see [IAM Permissions](#iam-permissions))
 
 **Software:**
-- Vector or FluentBit (for log collection)
-- Podman or Docker
-- Systemd (for service management)
+- [Vector](https://vector.dev/) or [FluentBit](https://fluentbit.io/) for log collection
+- Podman/Docker for containers
+- Systemd for service management (Quadlet option)
+
+### Deployment Options
+
+Choose the deployment method that fits your environment:
+
+1. **[Podman Quadlet](#option-1-podman-quadlet)** - Production deployments with systemd integration
+2. **[Docker Compose](#option-2-docker-compose)** - Development, testing, and simple deployments
 
 ---
 
-## Deployment Option 1: Podman Quadlet
+## Option 1: Podman Quadlet
 
 **Best for:** Production deployments with systemd integration
 
-### 1. Install VersityGW
+### 1. Install S3 Storage
+
+Install VersityGW (or use MinIO/AWS S3):
 
 ```bash
-# Install and start VersityGW
 # See: https://github.com/versity/versitygw
-
 systemctl enable versitygw
 systemctl start versitygw
 ```
@@ -80,146 +70,76 @@ aws s3 mb s3://openchami-logs-daily --endpoint-url=http://localhost:7070
 
 ### 3. Create IAM Users
 
-Create three users with appropriate permissions:
-
-**log-writer:**
-- `s3:PutObject` on raw bucket
-
-**log-compactor:**
-- `s3:GetObject`, `s3:ListBucket` on raw bucket
-- `s3:PutObject` on compacted bucket
-- `s3:DeleteObject` on raw bucket
-
-**log-reader:**
-- `s3:GetObject`, `s3:ListBucket` on compacted bucket
+Create three users with minimal permissions (see [IAM Permissions](#iam-permissions) table).
 
 ### 4. Configure Vector Collector
 
-Create `/etc/vector/vector.yaml`:
-
-```yaml
-sources:
-  syslog:
-    type: syslog
-    mode: tcp
-    address: 0.0.0.0:514
-
-transforms:
-  parse:
-    type: remap
-    inputs: ["syslog"]
-    source: |
-      .ts = .timestamp
-      .host = .hostname
-      .msg = .message
-      .level = .severity
-
-sinks:
-  s3:
-    type: aws_s3
-    inputs: ["parse"]
-    bucket: openchami-logs-raw
-    key_prefix: logs/
-    compression: none
-    encoding:
-      codec: ndjson
-    batch:
-      max_bytes: 10485760  # 10MB
-      timeout_secs: 300     # 5 minutes
-    auth:
-      access_key_id: "${S3_ACCESS_KEY}"
-      secret_access_key: "${S3_SECRET_KEY}"
-    endpoint: "http://localhost:7070"
-    region: us-east-1
-```
-
-Create `/etc/systemd/system/vector.service`:
-
-```ini
-[Unit]
-Description=Vector Log Collector
-After=network.target
-
-[Service]
-Type=simple
-User=vector
-EnvironmentFile=/etc/vector/vector.env
-ExecStart=/usr/bin/vector --config /etc/vector/vector.yaml
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Create `/etc/vector/vector.env`:
-
+**Install Vector:**
 ```bash
+# See: https://vector.dev/docs/setup/installation/
+```
+
+**Copy example configuration:**
+```bash
+# Copy Vector config
+sudo cp deploy/vector/vector.yaml /etc/vector/vector.yaml
+
+# Copy systemd service
+sudo cp deploy/systemd/vector.service /etc/systemd/system/vector.service
+
+# Create environment file
+sudo bash -c 'cat > /etc/vector/vector.env <<EOF
+S3_ENDPOINT=http://localhost:7070
 S3_ACCESS_KEY=log-writer-key
 S3_SECRET_KEY=log-writer-secret
+EOF'
+
+sudo chmod 600 /etc/vector/vector.env
 ```
 
-Start Vector:
-
+**Start Vector:**
 ```bash
+systemctl daemon-reload
 systemctl enable vector
 systemctl start vector
+systemctl status vector
 ```
 
-### 5. Configure Compactor (Quadlet)
+**Example files:**
+- [`deploy/vector/vector.yaml`](../deploy/vector/vector.yaml) - Vector configuration
+- [`deploy/systemd/vector.service`](../deploy/systemd/vector.service) - Systemd unit
 
-Create `/etc/containers/systemd/openchami-logq-compactor.container`:
+### 5. Configure Compactor
 
-```ini
-[Unit]
-Description=OpenCHAMI Log Compactor
-After=network-online.target
+**Copy Quadlet configuration:**
+```bash
+# Copy Quadlet files
+sudo cp deploy/systemd/openchami-logq-compactor.container \
+  /etc/containers/systemd/openchami-logq-compactor.container
 
-[Container]
-Image=ghcr.io/openchami/logq-compactor:latest
-Environment=S3_ENDPOINT=http://host.containers.internal:7070
-Environment=S3_ACCESS_KEY=log-compactor-key
-Environment=S3_SECRET_KEY=log-compactor-secret
-Environment=S3_BUCKET_RAW=openchami-logs-raw
-Environment=S3_BUCKET_COMPACTED=openchami-logs-daily
-Environment=S3_SSL=false
-Network=host
+sudo cp deploy/systemd/openchami-logq-compactor.timer \
+  /etc/containers/systemd/openchami-logq-compactor.timer
 
-[Service]
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+# Edit to set your credentials
+sudo nano /etc/containers/systemd/openchami-logq-compactor.container
 ```
 
-Create timer for daily compaction at 2 AM:
-
-Create `/etc/containers/systemd/openchami-logq-compactor.timer`:
-
-```ini
-[Unit]
-Description=Run OpenCHAMI Log Compactor Daily
-
-[Timer]
-OnCalendar=daily
-OnCalendar=*-*-* 02:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable the timer:
-
+**Enable timer:**
 ```bash
 systemctl daemon-reload
 systemctl enable openchami-logq-compactor.timer
 systemctl start openchami-logq-compactor.timer
+systemctl status openchami-logq-compactor.timer
 ```
+
+**Example files:**
+- [`deploy/systemd/openchami-logq-compactor.container`](../deploy/systemd/openchami-logq-compactor.container) - Quadlet container
+- [`deploy/systemd/openchami-logq-compactor.timer`](../deploy/systemd/openchami-logq-compactor.timer) - Systemd timer
 
 ### 6. Install Query CLI
 
 ```bash
-# Download binary
+# Download and install
 curl -sSL https://raw.githubusercontent.com/OpenCHAMI/legendary-funicular/main/installer.bash | bash
 
 # Configure
@@ -238,112 +158,26 @@ openchami-logq-query inspect dates
 
 ---
 
-## Deployment Option 2: Docker Compose
+## Option 2: Docker Compose
 
 **Best for:** Development, testing, and simple deployments
 
-### Complete Stack
-
-Create `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  # S3 Storage (VersityGW)
-  versitygw:
-    image: versity/versitygw:latest
-    ports:
-      - "7070:7070"
-    environment:
-      - VERSITY_GW_ENDPOINT=:7070
-      - VERSITY_GW_ACCESS_KEY=admin
-      - VERSITY_GW_SECRET_KEY=admin-secret
-    volumes:
-      - versity-data:/data
-    restart: unless-stopped
-
-  # Log Collector (Vector)
-  vector:
-    image: timberio/vector:latest
-    ports:
-      - "514:514/tcp"
-    volumes:
-      - ./vector.yaml:/etc/vector/vector.yaml:ro
-    environment:
-      - S3_ENDPOINT=http://versitygw:7070
-      - S3_ACCESS_KEY=log-writer
-      - S3_SECRET_KEY=log-writer-secret
-    depends_on:
-      - versitygw
-    restart: unless-stopped
-
-  # Compactor (runs daily)
-  compactor:
-    image: ghcr.io/openchami/logq-compactor:latest
-    environment:
-      - S3_ENDPOINT=http://versitygw:7070
-      - S3_ACCESS_KEY=log-compactor
-      - S3_SECRET_KEY=log-compactor-secret
-      - S3_BUCKET_RAW=openchami-logs-raw
-      - S3_BUCKET_COMPACTED=openchami-logs-daily
-      - S3_SSL=false
-    depends_on:
-      - versitygw
-    restart: on-failure
-    # Run daily at 2 AM (requires external scheduler like cron or systemd timer)
-
-volumes:
-  versity-data:
-```
-
-Create `vector.yaml`:
-
-```yaml
-sources:
-  syslog:
-    type: syslog
-    mode: tcp
-    address: 0.0.0.0:514
-
-transforms:
-  parse:
-    type: remap
-    inputs: ["syslog"]
-    source: |
-      .ts = .timestamp
-      .host = .hostname
-      .msg = .message
-      .level = .severity
-
-sinks:
-  s3:
-    type: aws_s3
-    inputs: ["parse"]
-    bucket: openchami-logs-raw
-    key_prefix: logs/
-    compression: none
-    encoding:
-      codec: ndjson
-    batch:
-      max_bytes: 10485760
-      timeout_secs: 300
-    auth:
-      access_key_id: "${S3_ACCESS_KEY}"
-      secret_access_key: "${S3_SECRET_KEY}"
-    endpoint: "${S3_ENDPOINT}"
-    region: us-east-1
-```
-
-Start the stack:
+### Quick Start
 
 ```bash
+# Copy example docker-compose.yml
+cp deploy/docker/docker-compose.yml .
+cp deploy/vector/vector.yaml .
+
 # Start services
 docker-compose up -d
 
-# Create buckets
-docker-compose exec versitygw aws s3 mb s3://openchami-logs-raw --endpoint-url=http://localhost:7070
-docker-compose exec versitygw aws s3 mb s3://openchami-logs-daily --endpoint-url=http://localhost:7070
+# Create buckets (wait ~10s for VersityGW to start)
+sleep 10
+docker-compose exec versitygw \
+  aws s3 mb s3://openchami-logs-raw --endpoint-url=http://localhost:7070
+docker-compose exec versitygw \
+  aws s3 mb s3://openchami-logs-daily --endpoint-url=http://localhost:7070
 
 # Run compactor manually
 docker-compose run --rm compactor
@@ -358,13 +192,42 @@ docker run --rm \
   sql "SELECT COUNT(*) FROM SOURCES"
 ```
 
+**Example file:**
+- [`deploy/docker/docker-compose.yml`](../deploy/docker/docker-compose.yml) - Complete stack
+
+### Scheduling Compactor
+
+Docker Compose doesn't have built-in scheduling. Use one of these options:
+
+**Option A: Cron**
+```bash
+# Add to crontab
+0 2 * * * cd /path/to/project && docker-compose run --rm compactor
+```
+
+**Option B: Systemd Timer**
+```bash
+# Create /etc/systemd/system/logq-compactor.timer
+# See deploy/systemd/openchami-logq-compactor.timer for example
+```
+
 ---
 
-## Configuration Management
+## Configuration
 
-For configuration details and environment variables, see the [main README](../README.md#configuration).
+### Environment Variables
 
-### IAM Permissions Summary
+For complete configuration reference, see [README Configuration section](../README.md#configuration).
+
+**Key variables:**
+- `S3_ENDPOINT` - S3 endpoint URL
+- `S3_ACCESS_KEY` - IAM user access key
+- `S3_SECRET_KEY` - IAM user secret key
+- `S3_BUCKET_RAW` - Raw logs bucket name
+- `S3_BUCKET_COMPACTED` - Compacted logs bucket name
+- `S3_SSL` - Enable SSL/TLS (`true` or `false`)
+
+### IAM Permissions
 
 | User | Bucket | Permissions |
 |------|--------|-------------|
@@ -373,38 +236,47 @@ For configuration details and environment variables, see the [main README](../RE
 | log-compactor | compacted | `s3:PutObject` |
 | log-reader | compacted | `s3:GetObject`, `s3:ListBucket` |
 
+**Why separate users?**
+- Principle of least privilege
+- Limits blast radius if credentials compromised
+- Easier to audit access
+
 ### Secrets Management
 
 **Development:**
-- Environment files with `chmod 600` permissions
-- Store in `/etc/openchami-logq/*.env`
+```bash
+# Use environment files with restricted permissions
+chmod 600 /etc/vector/vector.env
+chmod 600 ~/.openchami-logq.env
+```
 
 **Production:**
-- Use systemd credential files
-- Or external secrets manager (Vault, AWS Secrets Manager)
+- Use [systemd credential files](https://systemd.io/CREDENTIALS/)
+- Or external secrets manager ([Vault](https://www.vaultproject.io/), AWS Secrets Manager)
+- Rotate credentials regularly
 
 ---
 
 ## Monitoring
 
-### Key Metrics to Monitor
+### Key Metrics
 
-**Collector:**
+**Collector (Vector):**
 - Logs ingested per second
 - S3 upload failures
 - Buffer usage
 
 **Compactor:**
 - Files processed per run
-- Compression ratio
+- Compression ratio (typically 10:1)
 - S3 errors
 
 **Storage:**
-- Raw bucket size
-- Compacted bucket size
+- Raw bucket size (should shrink after compaction)
+- Compacted bucket size (grows steadily)
 - S3 request errors
 
-### Simple Monitoring Script
+### Health Check Script
 
 ```bash
 #!/bin/bash
@@ -421,26 +293,27 @@ COMPACTED_SIZE=$(aws s3 ls s3://openchami-logs-daily --recursive --endpoint-url=
 echo "Raw bucket: ${RAW_SIZE}GB"
 echo "Compacted bucket: ${COMPACTED_SIZE}GB"
 
-# Check if compactor ran recently
+# Check last compaction date
 LAST_COMPACTED=$(aws s3 ls s3://openchami-logs-daily/logs/ --endpoint-url=$S3_ENDPOINT | \
   tail -1 | awk '{print $1}')
 
 echo "Last compaction: $LAST_COMPACTED"
 ```
 
-### Logging
+### View Logs
 
 **Vector logs:**
 ```bash
 journalctl -u vector -f
 ```
 
-**Compactor logs:**
+**Compactor logs (Quadlet):**
 ```bash
-# Quadlet
 journalctl -u openchami-logq-compactor -f
+```
 
-# Docker Compose
+**Compactor logs (Docker Compose):**
+```bash
 docker-compose logs -f compactor
 ```
 
@@ -448,13 +321,9 @@ docker-compose logs -f compactor
 
 ## Troubleshooting
 
-### Common Issues
+### Vector Can't Write to S3
 
-#### Vector Can't Write to S3
-
-**Symptoms:**
-- Logs not appearing in raw bucket
-- Vector errors about S3 access
+**Symptoms:** Logs not appearing in raw bucket, Vector errors about S3 access
 
 **Solutions:**
 ```bash
@@ -471,11 +340,9 @@ aws s3 ls --endpoint-url=$S3_ENDPOINT
 echo "test" | aws s3 cp - s3://openchami-logs-raw/test.txt --endpoint-url=$S3_ENDPOINT
 ```
 
-#### Compactor Fails
+### Compactor Fails
 
-**Symptoms:**
-- Raw files accumulating
-- No new Parquet files in compacted bucket
+**Symptoms:** Raw files accumulating, no new Parquet files
 
 **Solutions:**
 ```bash
@@ -490,11 +357,9 @@ aws s3 ls s3://openchami-logs-raw/logs/ --endpoint-url=$S3_ENDPOINT
 aws s3 ls s3://openchami-logs-daily/logs/ --endpoint-url=$S3_ENDPOINT
 ```
 
-#### Query Returns No Results
+### Query Returns No Results
 
-**Symptoms:**
-- Query runs but returns empty results
-- `inspect dates` shows no dates
+**Symptoms:** Query runs but returns empty, `inspect dates` shows no dates
 
 **Solutions:**
 ```bash
@@ -511,11 +376,9 @@ openchami-logq-query inspect config
 openchami-logq-query sql --scope raw "SELECT COUNT(*) FROM SOURCES"
 ```
 
-#### S3 Storage Full
+### S3 Storage Full
 
-**Symptoms:**
-- Vector fails to write
-- Compactor fails
+**Symptoms:** Vector/Compactor fails to write
 
 **Solutions:**
 ```bash
@@ -526,9 +389,11 @@ aws s3 ls s3://openchami-logs-raw --recursive --endpoint-url=$S3_ENDPOINT | \
 aws s3 ls s3://openchami-logs-daily --recursive --endpoint-url=$S3_ENDPOINT | \
   awk '{sum+=$3} END {print "Compacted: " sum/1024/1024/1024 "GB"}'
 
-# Clean up old raw files (if compaction successful)
-# WARNING: Only do this if compacted data exists!
-aws s3 rm s3://openchami-logs-raw/logs/ --recursive --endpoint-url=$S3_ENDPOINT --exclude "*" --include "$(date -d '7 days ago' +%Y-%m-%d)*"
+# Clean up old raw files (WARNING: Only if compacted data exists!)
+aws s3 rm s3://openchami-logs-raw/logs/ --recursive \
+  --endpoint-url=$S3_ENDPOINT \
+  --exclude "*" \
+  --include "$(date -d '7 days ago' +%Y-%m-%d)*"
 ```
 
 ---
@@ -539,7 +404,7 @@ aws s3 rm s3://openchami-logs-raw/logs/ --recursive --endpoint-url=$S3_ENDPOINT 
 
 **Daily (Automated):**
 - Compactor runs via timer/cron
-- Logs are compacted to Parquet
+- Logs compacted to Parquet
 
 **Weekly:**
 - Check storage usage
@@ -548,7 +413,7 @@ aws s3 rm s3://openchami-logs-raw/logs/ --recursive --endpoint-url=$S3_ENDPOINT 
 
 **Monthly:**
 - Review retention policy
-- Clean up old compacted data if needed
+- Clean up old data if needed
 
 ### Maintenance Script
 
@@ -592,39 +457,29 @@ openchami-logq-query version
 
 **Compactor (Quadlet):**
 ```bash
-# Pull new image
 podman pull ghcr.io/openchami/logq-compactor:latest
-
-# Restart service
 systemctl restart openchami-logq-compactor
 ```
 
 **Compactor (Docker Compose):**
 ```bash
-# Pull new image
 docker-compose pull compactor
-
-# Restart
 docker-compose up -d compactor
 ```
 
-### Basic Security
+### Security Best Practices
 
 **File Permissions:**
 ```bash
-# Secure environment files
 chmod 600 /etc/vector/vector.env
 chmod 600 /etc/openchami-logq/*.env
-
-# Restrict user access
 chown root:root /etc/vector/vector.env
-chown root:root /etc/openchami-logq/*.env
 ```
 
 **Network Security:**
-- Use firewall to restrict access to S3 endpoint
-- Use SSL/TLS for S3 in production (`S3_SSL=true`)
-- Rotate access keys regularly
+- Use firewall to restrict S3 endpoint access
+- Enable SSL/TLS in production (`S3_SSL=true`)
+- Use VPN or private networks for S3 traffic
 
 **IAM Best Practices:**
 - Use separate users for each component
@@ -634,12 +489,12 @@ chown root:root /etc/openchami-logq/*.env
 
 ---
 
-## Additional Resources
+## Related Documentation
 
-- **[Main README](../README.md)** - Installation and basic usage
-- **[User Guide](USER_GUIDE.md)** - Advanced SQL queries and DuckDB tips
-- **[Architecture](ARCHITECTURE.md)** - System design details
-- **[Developer Guide](DEVELOPMENT.md)** - Contributing and development
+- **[Main README](../README.md)** - Installation and configuration
+- **[User Guide](USER_GUIDE.md)** - Advanced queries and SQL patterns
+- **[Architecture](ARCHITECTURE.md)** - System design and technical details
+- **[Developer Guide](DEVELOPMENT.md)** - Contributing and development setup
 
 ---
 

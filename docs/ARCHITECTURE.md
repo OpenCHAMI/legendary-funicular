@@ -4,13 +4,9 @@ SPDX-FileCopyrightText: Copyright © 2026 OpenCHAMI a Series of LF Projects, LLC
 SPDX-License-Identifier: MIT
 -->
 
-# Architecture Documentation
+# Architecture
 
-**Project:** openchami-logq
-**Version:** 1.0
-**Last Updated:** June 10, 2026
-
----
+Technical architecture and design decisions for openchami-logq.
 
 ## Table of Contents
 
@@ -20,10 +16,7 @@ SPDX-License-Identifier: MIT
 4. [Data Flow](#data-flow)
 5. [Storage Architecture](#storage-architecture)
 6. [Query Architecture](#query-architecture)
-7. [Compaction Architecture](#compaction-architecture)
-8. [Security Architecture](#security-architecture)
-9. [Scalability & Performance](#scalability--performance)
-10. [Technology Choices](#technology-choices)
+7. [Technology Choices](#technology-choices)
 
 ---
 
@@ -31,338 +24,188 @@ SPDX-License-Identifier: MIT
 
 ### Purpose
 
-openchami-logq is a lightweight log lake system designed for HPC environments. It provides:
-
+openchami-logq is a lightweight log lake system for HPC environments providing:
 - **Cheap storage** for all logs and events
 - **Fast queries** using SQL
-- **Schema flexibility** to handle evolving log formats
+- **Schema flexibility** for evolving log formats
 - **Zero maintenance** - no clusters, no indices
 
 ### Design Philosophy
 
-1. **Storage First** - Never lose data, optimize cost
+1. **Storage First** - Never lose data, optimize for cost
 2. **Query Second** - Fast enough for ad-hoc analysis
-3. **Simple Always** - No complex setup or maintenance
-4. **HPC Aware** - Built for xnames, services, and distributed systems
+3. **Simple Always** - Minimal setup and maintenance
+4. **HPC Aware** - Built for distributed systems
 
-### High-Level Architecture
+### System Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Data Sources                              │
-│  ┌─────────┐  ┌────────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Syslog  │  │ CloudEvents│  │  Vector  │  │  FluentBit   │  │
-│  └────┬────┘  └─────┬──────┘  └────┬─────┘  └──────┬───────┘  │
-└───────┼─────────────┼──────────────┼────────────────┼──────────┘
-        │             │              │                │
-        └─────────────┴──────────────┴────────────────┘
-                              │
-                              v
-                  ┌───────────────────────┐
-                  │   Collector Layer     │
-                  │  (Vector/FluentBit)   │
-                  │  - Accepts all logs   │
-                  │  - No validation      │
-                  │  - NDJSON output      │
-                  └───────────┬───────────┘
-                              │
-                              v
-        ┌─────────────────────────────────────────┐
-        │         Storage Layer (S3)               │
-        │  ┌────────────────┐  ┌────────────────┐│
-        │  │  Raw Bucket    │  │Compacted Bucket││
-        │  │   (NDJSON)     │  │   (Parquet)    ││
-        │  │  - Minutely    │  │   - Daily      ││
-        │  │  - Compressed  │  │   - Optimized  ││
-        │  └───────┬────────┘  └────────┬───────┘│
-        └──────────┼────────────────────┼────────┘
-                   │                    │
-                   v                    │
-          ┌────────────────┐            │
-          │   Compactor    │            │
-          │  - Reads raw   │────────────┘
-          │  - Parses logs │
-          │  - Writes      │
-          │    Parquet     │
-          └────────────────┘
-                                        │
-                                        v
-                              ┌──────────────────┐
-                              │   Query Engine   │
-                              │    (DuckDB)      │
-                              │  - SQL queries   │
-                              │  - Direct S3     │
-                              │  - No indexing   │
-                              └─────────┬────────┘
-                                        │
-                                        v
-                              ┌──────────────────┐
-                              │   CLI Interface  │
-                              │ - openchami-logq │
-                              │ - JSON output    │
-                              │ - Reports        │
-                              └──────────────────┘
+```mermaid
+graph TD
+    A[Log Sources] -->|syslog/events| B[Collector<br/>Vector/FluentBit]
+    B -->|NDJSON| C[S3 Raw Bucket<br/>openchami-logs-raw]
+    C -->|daily| D[Compactor<br/>openchami-logq-compactor]
+    D -->|Parquet| E[S3 Compacted Bucket<br/>openchami-logs-daily]
+    E -->|SQL queries| F[Query CLI<br/>openchami-logq-query]
+    F -->|JSON/NDJSON| G[User]
+
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#ffe1e1
+    style D fill:#fff4e1
+    style E fill:#e1ffe1
+    style F fill:#fff4e1
+    style G fill:#e1f5ff
 ```
 
 ---
 
 ## Architecture Principles
 
-### 1. Never Lose Data
+### 1. Append-Only Storage
 
-**Principle:** Logs are written to storage before any processing.
+**Decision:** Never delete or modify raw logs.
 
-**Implementation:**
-- Collectors write directly to S3 (no intermediate queues)
-- NDJSON format (one log per line, never corrupts entire file)
-- No schema validation (accept everything)
-- Compaction only deletes after successful Parquet write
-
-**Trade-offs:**
-- ✅ Zero data loss
-- ✅ Simple recovery
-- ⚠️ Higher storage costs initially
-- ⚠️ Raw data requires parsing at query time
-
-### 2. Optimize for Cost
-
-**Principle:** Logs are cheap to store, expensive to query.
+**Rationale:**
+- Logs are immutable evidence
+- Storage is cheap (~$0.02/GB/month)
+- Deletion risks losing critical data
 
 **Implementation:**
-- S3 storage (~$0.023/GB/month)
-- Compress NDJSON with zstd (3x reduction)
-- Convert to Parquet daily (10x reduction)
-- Move old data to S3 Glacier (90% cost reduction)
+- Raw logs stored as-is in NDJSON
+- Compaction creates new files, doesn't modify originals
+- Original deletion only after successful compaction
 
-**Economics:**
-```
-1TB logs/month:
-- Raw NDJSON:     1000 GB × $0.023 = $23/month
-- Compressed:      333 GB × $0.023 = $7.66/month
-- Parquet:         100 GB × $0.004 = $0.40/month (S3 IA)
-- 1 year old:       10 GB × $0.001 = $0.01/month (Glacier)
+### 2. Schema-on-Read
 
-Total: ~$8/month vs $1000+/month for traditional systems
-```
+**Decision:** No schema validation during ingestion.
 
-### 3. Schema Flexibility
-
-**Principle:** Log formats evolve, systems shouldn't break.
+**Rationale:**
+- Log formats evolve over time
+- Schema validation can cause data loss
+- Better to store everything and parse later
 
 **Implementation:**
-- Store raw JSON (preserves all fields)
-- Extract known fields best-effort
-- Unknown fields preserved in `data` column
-- No schema migrations required
+- Collector writes raw JSON/syslog without validation
+- Compactor does best-effort field extraction
+- Query engine handles missing/extra fields gracefully
 
-**Example:**
-```json
-// Old format
-{"ts": "...", "host": "...", "msg": "..."}
+### 3. Separation of Concerns
 
-// New format (works without changes)
-{"ts": "...", "host": "...", "msg": "...", "trace_id": "...", "xname": "..."}
-```
+**Decision:** Separate components for collection, storage, compaction, and querying.
 
-### 4. Query Performance "Good Enough"
-
-**Principle:** Don't optimize for speed, optimize for simplicity.
+**Rationale:**
+- Each component can scale independently
+- Failures in one don't affect others
+- Easier to maintain and debug
 
 **Implementation:**
-- DuckDB (embedded, no cluster)
-- Columnar Parquet (only read needed columns)
-- Direct S3 access (no data movement)
-- Predicate pushdown (filter at storage layer)
+- Collector: Vector/FluentBit (external dependency)
+- Storage: S3-compatible (external dependency)
+- Compactor: Go binary, runs on schedule
+- Query: Go CLI, runs on-demand
 
-**Performance:**
-- Simple queries: <100ms
-- Aggregations: <1s
-- Full scans: <5s (1GB data)
+### 4. Direct S3 Access
 
-**Not optimized for:**
-- ❌ Real-time dashboards (use Prometheus)
-- ❌ High-frequency queries (use time-series DB)
-- ❌ Sub-second latency (use streaming)
+**Decision:** Query Parquet files directly from S3 without copying.
 
-### 5. Zero Maintenance
-
-**Principle:** No clusters, no indices, no tuning.
+**Rationale:**
+- No local storage required
+- Leverages DuckDB's S3 integration
+- Reduces operational complexity
 
 **Implementation:**
-- Embedded DuckDB (no server)
-- S3 storage (managed by provider)
-- Stateless compactor (cron job)
-- No data migration
-
-**Operations:**
-- Deploy: Copy binary + set env vars
-- Monitor: Check compactor logs
-- Backup: S3 replication (built-in)
-- Scale: Add more S3 buckets
+- DuckDB reads Parquet from S3 via HTTP range requests
+- Only fetches required row groups and columns
+- No intermediate database or cache
 
 ---
 
 ## Component Architecture
 
-### 1. Collector (Vector/FluentBit)
+### Collector (Vector/FluentBit)
 
-**Responsibility:** Ingest logs and write to S3.
+**Responsibility:** Accept logs and write to S3 raw bucket.
 
-**Design:**
-```
-┌──────────────┐
-│   Syslog     │
-│   Input      │──┐
-└──────────────┘  │
-                  ├──> ┌──────────────┐     ┌──────────────┐
-┌──────────────┐  │    │   Parser     │     │   S3 Sink    │
-│ CloudEvents  │──┼───>│ (optional)   │────>│   (NDJSON)   │
-│   Input      │  │    └──────────────┘     └──────────────┘
-└──────────────┘  │
-                  │
-┌──────────────┐  │
-│   HTTP       │──┘
-│   Input      │
-└──────────────┘
-```
+**Key Characteristics:**
+- External dependency (not part of this project)
+- Configured via YAML
+- Writes NDJSON format
+- Batches writes (5-10MB or 5 minutes)
 
 **Configuration:**
-- **Inputs:** syslog (TCP/UDP), CloudEvents (HTTP), JSON (HTTP)
-- **Transform:** Add timestamp, normalize format
-- **Output:** S3 bucket, NDJSON format, minutely rotation
-- **Buffering:** 10MB or 60 seconds (whichever first)
-
-**Key Files:**
-- `collector/vector.yaml` - Vector configuration
-- `collector/fluent-bit.conf` - FluentBit configuration
-
-### 2. Compactor
-
-**Responsibility:** Convert NDJSON → Parquet daily.
-
-**Design:**
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Compactor Process                     │
-│                                                          │
-│  1. Discovery                                           │
-│     ┌────────────────────────────────────┐             │
-│     │ List S3 objects for date           │             │
-│     │ Filter by prefix (logs/ or events/)│             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  2. Pipeline Setup                                     │
-│     ┌────────────v───────────────────────┐             │
-│     │ Create streaming pipeline          │             │
-│     │ - Reader goroutine (S3 → parse)    │             │
-│     │ - Writer goroutine (Parquet → S3)  │             │
-│     │ - Error channels                   │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  3. Reader (Producer)                                  │
-│     ┌────────────v───────────────────────┐             │
-│     │ For each S3 object:                │             │
-│     │   - Stream download                │             │
-│     │   - Decompress (zstd)              │             │
-│     │   - Parse lines (syslog/cloudevent)│             │
-│     │   - Convert to Parquet schema      │             │
-│     │   - Write to pipe                  │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  4. Writer (Consumer)                                  │
-│     ┌────────────v───────────────────────┐             │
-│     │ Read from pipe                     │             │
-│     │ Upload Parquet to S3               │             │
-│     │ Log bytes written                  │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  5. Cleanup                                            │
-│     ┌────────────v───────────────────────┐             │
-│     │ If success:                        │             │
-│     │   - Delete source NDJSON files     │             │
-│     │ If failure:                        │             │
-│     │   - Keep source files for retry    │             │
-│     └────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────┘
+```yaml
+# See collector/vector.yaml for full example
+sinks:
+  s3:
+    type: aws_s3
+    bucket: openchami-logs-raw
+    key_prefix: logs/
+    encoding:
+      codec: ndjson
 ```
 
-**Key Features:**
-- **Streaming:** Constant memory (no full load)
-- **Concurrent:** Reader and writer run in parallel
-- **Safe:** Only deletes after successful write
-- **Resumable:** Failed compactions can retry
+### Compactor
 
-**Key Files:**
-- `compactor/main.go` - Entry point
-- `compactor/compaction.go` - Main compaction logic
-- `compactor/internal/record/` - Parsers (syslog, cloudevent)
-- `compactor/internal/pipeline/` - Streaming pipeline
-- `compactor/internal/zio/` - Compression (zstd)
+**Responsibility:** Convert raw NDJSON to optimized Parquet.
 
-### 3. Query Engine
+**Key Characteristics:**
+- Go binary (~10MB)
+- Runs daily via cron/timer
+- Stateless (no local database)
+- Streaming architecture (constant memory)
 
-**Responsibility:** Execute SQL queries on Parquet files.
+**Architecture:**
 
-**Design:**
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Query Process                         │
-│                                                          │
-│  1. Configuration                                       │
-│     ┌────────────────────────────────────┐             │
-│     │ Load S3 credentials                │             │
-│     │ Parse CLI flags                    │             │
-│     │ Build source paths                 │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  2. SQL Engine Setup                                   │
-│     ┌────────────v───────────────────────┐             │
-│     │ Create DuckDB connection           │             │
-│     │ Configure S3 secret                │             │
-│     │ Prepare query:                     │             │
-│     │   - Replace SOURCES placeholder    │             │
-│     │   - Add UNION for multiple sources │             │
-│     │   - Wrap with to_json if needed    │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  3. Query Execution                                    │
-│     ┌────────────v───────────────────────┐             │
-│     │ Execute prepared query             │             │
-│     │ DuckDB:                            │             │
-│     │   - Reads Parquet from S3          │             │
-│     │   - Applies predicates             │             │
-│     │   - Returns result stream          │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  4. Result Processing                                  │
-│     ┌────────────v───────────────────────┐             │
-│     │ For each row:                      │             │
-│     │   - Scan (JSON or struct)          │             │
-│     │   - Encode (JSON or NDJSON)        │             │
-│     │   - Write to output                │             │
-│     └────────────┬───────────────────────┘             │
-│                  │                                      │
-│  5. Cleanup                                            │
-│     ┌────────────v───────────────────────┐             │
-│     │ Close result set                   │             │
-│     │ Close encoder                      │             │
-│     │ Close DuckDB connection            │             │
-│     └────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    A[S3 Raw] -->|stream| B[Reader]
+    B --> C[Parser<br/>syslog/cloudevent]
+    C --> D[Parquet Writer]
+    D -->|upload| E[S3 Compacted]
+    E -->|success| F[Delete Raw]
+
+    style A fill:#ffe1e1
+    style E fill:#e1ffe1
 ```
 
-**Key Features:**
-- **Direct S3 Access:** No data movement
-- **Columnar Reading:** Only read needed columns
-- **Predicate Pushdown:** Filter at storage layer
-- **Streaming Output:** Constant memory
+**Parsing Strategy:**
+- Detect format (syslog vs cloudevent) from first field
+- Extract common fields: `ts`, `host`, `level`, `msg`
+- Store unknown fields in `data` JSON column
+- Never fail on parse errors (store as-is)
 
-**Key Files:**
-- `query/main.go` - Entry point
-- `query/cmd/sql/` - SQL command
-- `query/cmd/report/` - Report system
-- `query/internal/sql/` - DuckDB integration
-- `query/internal/render/` - Output formatting
+### Query Engine
+
+**Responsibility:** Execute SQL queries against Parquet files.
+
+**Key Characteristics:**
+- Go binary with embedded DuckDB
+- Stateless (no local database)
+- Reads directly from S3
+- Outputs JSON or NDJSON
+
+**Architecture:**
+
+```mermaid
+graph LR
+    A[User SQL] --> B[openchami-logq-query]
+    B --> C[DuckDB]
+    C -->|HTTP range requests| D[S3 Parquet]
+    D --> C
+    C --> B
+    B -->|JSON/NDJSON| E[stdout]
+
+    style D fill:#e1ffe1
+```
+
+**Query Pattern:**
+```sql
+-- SOURCES is replaced with actual S3 paths
+SELECT * FROM SOURCES WHERE ts > '2026-06-10'
+
+-- Becomes:
+SELECT * FROM read_parquet('s3://bucket/logs/2026-06-10/*.parquet')
+```
 
 ---
 
@@ -370,92 +213,65 @@ Total: ~$8/month vs $1000+/month for traditional systems
 
 ### Ingestion Flow
 
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Collector as Vector
+    participant S3 as S3 Raw Bucket
+
+    App->>Collector: Send log (syslog/event)
+    Collector->>Collector: Buffer (5min or 10MB)
+    Collector->>S3: Write NDJSON
+    Note over S3: logs/2026-06-10/12-30.ndjson
 ```
-1. Log Generated
-   ├─> Application writes log
-   └─> Sent to collector (syslog/HTTP)
 
-2. Collector Receives
-   ├─> Parse (if syslog)
-   ├─> Add timestamp
-   ├─> Convert to NDJSON
-   └─> Buffer (10MB or 60s)
+**Path Pattern:** `logs/YYYY-MM-DD/HH-MM.ndjson`
 
-3. Write to S3 (Raw Bucket)
-   ├─> Compress with zstd
-   ├─> Key: logs/YYYY-MM-DD/HH-MM-SS-uuid.ndjson.zst
-   └─> ACL: log-writer (write-only)
-
-4. Raw Storage
-   ├─> Retention: 7 days
-   ├─> Size: ~1GB/day (typical)
-   └─> Cost: ~$0.023/GB/month
-```
+**File Size:** Typically 5-10MB (5 minutes of logs)
 
 ### Compaction Flow
 
+```mermaid
+sequenceDiagram
+    participant Cron as Cron/Timer
+    participant Compactor as Compactor
+    participant Raw as S3 Raw
+    participant Compacted as S3 Compacted
+
+    Cron->>Compactor: Run daily at 2 AM
+    Compactor->>Raw: List logs/YYYY-MM-DD/*.ndjson
+    Raw-->>Compactor: File list
+    loop For each file
+        Compactor->>Raw: Stream NDJSON
+        Compactor->>Compactor: Parse & convert to Parquet
+        Compactor->>Compacted: Upload Parquet
+    end
+    Compactor->>Raw: Delete processed files
 ```
-1. Compactor Starts (Daily 2 AM)
-   ├─> Date: yesterday
-   └─> Prefix: logs/2026-06-09/
 
-2. List Raw Files
-   ├─> S3 ListObjects
-   ├─> Filter by prefix
-   └─> Result: [file1.ndjson.zst, file2.ndjson.zst, ...]
+**Path Pattern:** `logs/YYYY-MM-DD.parquet`
 
-3. Stream Processing
-   ├─> For each file:
-   │   ├─> Download (streaming)
-   │   ├─> Decompress (zstd)
-   │   ├─> Parse (line-by-line)
-   │   ├─> Extract fields
-   │   └─> Write to Parquet (streaming)
-   └─> Memory: constant (no full load)
-
-4. Write Parquet
-   ├─> Compress with snappy
-   ├─> Key: logs/date=2026-06-09/uuid.parquet
-   ├─> ACL: log-compactor (write), log-reader (read)
-   └─> Size: ~100MB (10x compression)
-
-5. Cleanup
-   ├─> Verify Parquet upload
-   ├─> Delete raw NDJSON files
-   └─> Log completion
-```
+**Compression:** Typically 10:1 (100MB NDJSON → 10MB Parquet)
 
 ### Query Flow
 
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as openchami-logq-query
+    participant DuckDB
+    participant S3 as S3 Compacted
+
+    User->>CLI: SQL query
+    CLI->>CLI: Replace SOURCES with S3 paths
+    CLI->>DuckDB: Execute query
+    DuckDB->>S3: HTTP range request (row groups)
+    S3-->>DuckDB: Parquet data
+    DuckDB-->>CLI: Result rows
+    CLI->>User: JSON/NDJSON output
 ```
-1. User Executes Query
-   └─> openchami-logq-query sql "SELECT ..."
 
-2. Parse Configuration
-   ├─> Load S3 credentials
-   ├─> Parse --scope, --stream, --format
-   └─> Build source paths
-
-3. Prepare Query
-   ├─> Replace SOURCES placeholder
-   ├─> Add UNION for multiple streams
-   ├─> Wrap with to_json() if needed
-   └─> Example: SELECT * FROM read_parquet('s3://bucket/logs/*.parquet')
-
-4. Execute with DuckDB
-   ├─> DuckDB connects to S3
-   ├─> Reads Parquet metadata
-   ├─> Applies WHERE filters
-   ├─> Reads only needed columns
-   ├─> Returns result stream
-   └─> Performance: ~1s for 1GB
-
-5. Format Output
-   ├─> Scan each row
-   ├─> Encode (JSON or NDJSON)
-   ├─> Stream to stdout
-   └─> Memory: constant (no buffering)
-```
+**Optimization:** DuckDB only fetches required columns and row groups (partition pruning).
 
 ---
 
@@ -466,120 +282,74 @@ Total: ~$8/month vs $1000+/month for traditional systems
 ```
 openchami-logs-raw/
 ├── logs/
-│   ├── 2026-06-09/
-│   │   ├── 00-15-30-abc123.ndjson.zst
-│   │   ├── 00-16-30-def456.ndjson.zst
-│   │   └── ... (96 files/day @ 15min intervals)
-│   └── 2026-06-10/
+│   ├── 2026-06-10/
+│   │   ├── 00-00.ndjson
+│   │   ├── 00-05.ndjson
+│   │   └── ...
+│   └── 2026-06-11/
 │       └── ...
 └── events/
-    ├── 2026-06-09/
-    │   └── ...
     └── 2026-06-10/
         └── ...
 
 openchami-logs-daily/
 ├── logs/
-│   ├── date=2026-06-09/
-│   │   └── abc123-def456.parquet
-│   └── date=2026-06-10/
-│       └── ...
+│   ├── 2026-06-10.parquet
+│   ├── 2026-06-11.parquet
+│   └── ...
 └── events/
-    ├── date=2026-06-09/
-    │   └── ...
-    └── date=2026-06-10/
-        └── ...
+    ├── 2026-06-10.parquet
+    └── ...
 ```
 
-### File Formats
+### Data Formats
 
-**Raw NDJSON:**
+#### Raw Format (NDJSON)
+
+**Syslog:**
 ```json
 {"ts":"2026-06-10T12:00:00Z","host":"node01","level":"INFO","msg":"Started"}
 {"ts":"2026-06-10T12:00:01Z","host":"node02","level":"ERROR","msg":"Failed"}
 ```
 
-**Compressed NDJSON (zstd):**
-- Compression ratio: ~3:1
-- Streaming: yes
-- Seekable: no
+**CloudEvents:**
+```json
+{"specversion":"1.0","type":"system.event","source":"/node01","time":"2026-06-10T12:00:00Z","data":{...}}
+```
 
-**Parquet Schema (Syslog):**
+#### Compacted Format (Parquet)
+
+**Schema:**
 ```
 ts: TIMESTAMP
-host: STRING
-level: STRING
-facility: STRING
-severity: STRING
-msg: STRING
-data: JSON  // Original full record
-parse_error: STRING  // If parsing failed
+host: VARCHAR
+level: VARCHAR
+msg: VARCHAR
+data: JSON
+source: VARCHAR (cloudevents)
+type: VARCHAR (cloudevents)
 ```
 
-**Parquet Schema (CloudEvents):**
-```
-ts: TIMESTAMP
-type: STRING
-source: STRING
-specversion: STRING
-id: STRING
-cloudevent: JSON  // Original full record
-parse_error: STRING  // If parsing failed
-```
+**Advantages:**
+- Columnar format (only read needed columns)
+- Compressed (zstd compression)
+- Row group pruning (skip files/groups outside time range)
+- Metadata (min/max timestamps for partition pruning)
 
-### Storage Lifecycle
+### IAM Model
 
-```
-Day 0-7:   Raw NDJSON (S3 Standard)
-Day 7-30:  Parquet (S3 Standard)
-Day 30-90: Parquet (S3 Infrequent Access)
-Day 90+:   Parquet (S3 Glacier)
-```
+Three IAM users with minimal permissions:
 
-### IAM Policies
+**log-writer** (Collector):
+- `s3:PutObject` on raw bucket
 
-**log-writer (Collector):**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": ["s3:PutObject"],
-    "Resource": "arn:aws:s3:::openchami-logs-raw/*"
-  }]
-}
-```
+**log-compactor** (Compactor):
+- `s3:GetObject`, `s3:ListBucket` on raw bucket
+- `s3:PutObject` on compacted bucket
+- `s3:DeleteObject` on raw bucket (post-compaction)
 
-**log-compactor:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
-      "Resource": "arn:aws:s3:::openchami-logs-raw/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject"],
-      "Resource": "arn:aws:s3:::openchami-logs-daily/*"
-    }
-  ]
-}
-```
-
-**log-reader (Query):**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": ["s3:GetObject", "s3:ListBucket"],
-    "Resource": "arn:aws:s3:::openchami-logs-daily/*"
-  }]
-}
-```
+**log-reader** (Query):
+- `s3:GetObject`, `s3:ListBucket` on compacted bucket
 
 ---
 
@@ -587,293 +357,64 @@ Day 90+:   Parquet (S3 Glacier)
 
 ### DuckDB Integration
 
-**Why DuckDB?**
-- Embedded (no server)
-- Columnar (fast analytics)
-- S3-native (direct access)
-- SQL (familiar interface)
+**Why DuckDB:**
+- Embedded (no server process)
+- Native S3 support with HTTP range requests
+- Columnar engine optimized for analytics
+- Full SQL support (window functions, CTEs, etc.)
+- Apache Arrow integration
 
-**Configuration:**
+**Query Execution:**
+
+```mermaid
+graph TD
+    A[SQL Query] --> B[Parse SQL]
+    B --> C[Replace SOURCES placeholder]
+    C --> D[DuckDB Query Plan]
+    D --> E{Partition Pruning}
+    E -->|ts filter| F[Select Parquet files]
+    F --> G{Column Pruning}
+    G -->|SELECT clause| H[Fetch row groups]
+    H --> I[Execute query]
+    I --> J[Return results]
+```
+
+### SOURCES Placeholder
+
+**User Query:**
 ```sql
-CREATE SECRET local_s3 (
-  TYPE s3,
-  PROVIDER config,
-  KEY_ID 'access-key',
-  SECRET 'secret-key',
-  REGION 'us-east-1',
-  ENDPOINT 'http://localhost:7070',
-  USE_SSL false
-);
+SELECT * FROM SOURCES WHERE ts > '2026-06-10'
 ```
 
-### Query Patterns
-
-**Pattern 1: Simple SELECT**
+**Actual Query:**
 ```sql
--- User query
-SELECT * FROM SOURCES WHERE level = 'ERROR'
-
--- Transformed query
-SELECT * exclude(data), json(data) as data
-FROM read_parquet('s3://bucket/logs/date=2026-06-10/*.parquet')
-WHERE level = 'ERROR'
+SELECT * FROM read_parquet([
+  's3://openchami-logs-daily/logs/2026-06-10.parquet',
+  's3://openchami-logs-daily/logs/2026-06-11.parquet',
+  ...
+])
+WHERE ts > '2026-06-10'
 ```
 
-**Pattern 2: Multi-Source UNION**
-```sql
--- User query
-SELECT * FROM SOURCES  -- with --stream logs,events
+**Scope Options:**
+- `--scope compacted`: Query Parquet files (default, fast)
+- `--scope raw`: Query NDJSON files (recent data)
+- `--scope all`: Query both (complete data)
 
--- Transformed query
-SELECT * FROM (
-  SELECT * FROM read_parquet('s3://bucket/logs/*.parquet')
-  UNION ALL BY NAME
-  SELECT * FROM read_parquet('s3://bucket/events/*.parquet')
-)
-```
+### Query Optimization
 
-**Pattern 3: JSON Output**
-```sql
--- User query with --format json
-SELECT * FROM SOURCES LIMIT 10
+**Partition Pruning:**
+- Files named by date (`2026-06-10.parquet`)
+- WHERE clause on `ts` filters files before reading
+- Parquet metadata (min/max `ts`) enables row group skipping
 
--- Transformed query
-SELECT to_json(t) FROM (
-  SELECT * FROM read_parquet('s3://bucket/logs/*.parquet')
-  LIMIT 10
-) t
-```
+**Column Pruning:**
+- Columnar format only reads selected columns
+- `SELECT ts, msg` reads 2 columns, not all
 
-### Report System
-
-**Architecture:**
-```
-┌──────────────────────────────────────────┐
-│           Report Interface               │
-│  - Name() string                         │
-│  - Description() string                  │
-│  - ParamSpecs() []ParamSpec              │
-│  - BuildQueryString(params) (string, error)│
-└──────────────────┬───────────────────────┘
-                   │
-                   │ implements
-                   │
-     ┌─────────────┴─────────────┐
-     │                           │
-┌────v────────────┐   ┌──────────v──────────┐
-│ FindParseErrors │   │ FindServiceErrors   │
-│  - No params    │   │  - No params        │
-│  - Returns logs │   │  - Returns errors   │
-│    with errors  │   │    by service       │
-└─────────────────┘   └─────────────────────┘
-```
-
-**Registry Pattern:**
-```go
-// Register reports
-func New() []report.Report {
-    return []report.Report{
-        &ReportFindParseErrors{},
-        &ReportFindServiceErrors{},
-    }
-}
-
-// Lookup by name
-func Get(name string) (report.Report, error) {
-    registry := New()
-    // Find by name...
-}
-```
-
----
-
-## Compaction Architecture
-
-### Pipeline Design
-
-**Streaming Pipeline:**
-```
-┌─────────┐   ┌──────────┐   ┌─────────┐   ┌──────────┐
-│ S3 Get  │──>│ Decomp   │──>│ Parse   │──>│ Parquet  │
-│         │   │ (zstd)   │   │ (line)  │   │ Writer   │
-└─────────┘   └──────────┘   └─────────┘   └────┬─────┘
-                                                  │
-                                                  v
-                                            ┌──────────┐
-                                            │ S3 Put   │
-                                            └──────────┘
-```
-
-**Goroutine Architecture:**
-```
-Main Goroutine
-├─> Reader Goroutine (Producer)
-│   ├─> For each S3 object
-│   ├─> Download + decompress + parse
-│   ├─> Write to pipe
-│   └─> Send keys to channel
-│
-└─> Writer Goroutine (Consumer)
-    ├─> Read from pipe
-    ├─> Upload to S3
-    └─> Send completion to channel
-
-Wait for both goroutines
-Check error channels
-Delete source files if success
-```
-
-### Error Handling
-
-**Philosophy:** Fail safe, keep source data.
-
-**Implementation:**
-```go
-// Reader error
-if err := transform(prev); err != nil {
-    pipe.Close()           // Stop writer
-    return nil, err        // Propagate error
-}
-// Source files NOT deleted
-
-// Writer error
-if err := sink.Put(key, pipe); err != nil {
-    return nil, err        // Propagate error
-}
-// Source files NOT deleted
-
-// Success
-if err == nil {
-    for _, key := range sourceKeys {
-        source.Delete(key)  // Only delete on success
-    }
-}
-```
-
-### Parser Architecture
-
-**Interface:**
-```go
-type Parser[T Record] interface {
-    Parse(line []byte) (T, error)
-}
-```
-
-**Implementations:**
-- `SyslogParser` - RFC3164/RFC5424 syslog
-- `CloudEventParser` - CloudEvents v1.0 JSON
-
-**Fuzzing:**
-- Both parsers have fuzz tests
-- 1000+ generated inputs tested
-- No crashes found
-
----
-
-## Security Architecture
-
-### Principle: Least Privilege
-
-**Three Separate IAM Users:**
-1. `log-writer` - Write-only to raw bucket
-2. `log-compactor` - Read raw, write compacted, delete raw
-3. `log-reader` - Read-only compacted bucket
-
-### S3 Encryption
-
-**At Rest:**
-- SSE-S3 (default)
-- Or SSE-KMS (customer managed keys)
-
-**In Transit:**
-- TLS 1.2+ (when S3_SSL=true)
-- Or unencrypted (for internal VersityGW)
-
-### Secrets Management
-
-**Environment Variables:**
-```bash
-# Never commit these!
-S3_ACCESS_KEY="..."
-S3_SECRET_KEY="..."
-```
-
-**Production:**
-- Use AWS Secrets Manager
-- Or HashiCorp Vault
-- Or Kubernetes Secrets
-
-### Query Injection
-
-**DuckDB Parameterization:**
-```go
-// SAFE: DuckDB handles S3 paths safely
-engine.Query("SELECT * FROM read_parquet(?)", []string{s3Path})
-
-// User SQL: Still risk of SQL injection
-// TODO: Add query validation/sanitization
-```
-
----
-
-## Scalability & Performance
-
-### Horizontal Scaling
-
-**Collector:**
-- Multiple instances (stateless)
-- Load balancer in front
-- Each writes to S3 independently
-
-**Compactor:**
-- One instance per date/prefix
-- Can run multiple dates in parallel
-- Idempotent (safe to retry)
-
-**Query:**
-- Stateless (embedded DuckDB)
-- Unlimited concurrent queries
-- Each query independent
-
-### Performance Characteristics
-
-**Write Throughput:**
-- Collector: ~100MB/s per instance
-- Bottleneck: S3 upload bandwidth
-
-**Compaction Throughput:**
-- ~10MB/s (limited by CPU for parsing)
-- ~1 hour for 1TB of logs
-
-**Query Latency:**
-- Simple queries: <100ms
-- Aggregations: <1s
-- Full scans: <5s per 1GB
-
-### Optimization Techniques
-
-**1. Predicate Pushdown:**
-```sql
--- DuckDB only reads matching rows from Parquet
-SELECT * FROM logs WHERE ts > '2026-06-10' AND level = 'ERROR'
-```
-
-**2. Column Pruning:**
-```sql
--- DuckDB only reads 'host' and 'msg' columns
-SELECT host, msg FROM logs
-```
-
-**3. Partition Pruning:**
-```
--- DuckDB only scans date=2026-06-10 partition
-logs/date=2026-06-10/*.parquet
-```
-
-**4. Compression:**
-- zstd for NDJSON (3:1)
-- snappy for Parquet (10:1)
-- Result: 30:1 overall
+**Predicate Pushdown:**
+- DuckDB pushes filters to Parquet reader
+- Filters applied during scan, not after
 
 ---
 
@@ -882,232 +423,95 @@ logs/date=2026-06-10/*.parquet
 ### Why S3?
 
 **Pros:**
-- ✅ Cheap storage
-- ✅ Infinite scale
-- ✅ Managed service
-- ✅ Built-in replication
-- ✅ Lifecycle policies
+- Industry standard (AWS, MinIO, VersityGW all compatible)
+- Cheap storage (~$0.02/GB/month)
+- No operational overhead (managed service or simple self-hosted)
+- HTTP-based (works through firewalls)
 
 **Cons:**
-- ⚠️ Eventual consistency
-- ⚠️ Higher latency than local disk
-- ⚠️ Per-request costs
+- Higher latency than local disk (50-100ms)
+- Request costs (mitigated by batching)
 
-**Alternatives Considered:**
-- Local filesystem: Not scalable
-- HDFS: Too complex
-- Ceph: Requires cluster
+**Decision:** Storage cost and simplicity outweigh latency concerns for log analytics.
 
-### Why DuckDB?
+### Why NDJSON?
 
 **Pros:**
-- ✅ Embedded (no server)
-- ✅ Columnar (fast analytics)
-- ✅ S3-native (direct access)
-- ✅ SQL (familiar)
-- ✅ Active development
+- Human-readable (debugging friendly)
+- Streamable (process line-by-line)
+- Schema-flexible (JSON supports any structure)
+- Universal (every language has JSON support)
 
 **Cons:**
-- ⚠️ Not distributed
-- ⚠️ No real-time queries
-- ⚠️ No indexing
+- Larger than binary formats
+- Slower to parse than binary
 
-**Alternatives Considered:**
-- ClickHouse: Too complex
-- Presto/Trino: Requires cluster
-- Athena: AWS-only, expensive
+**Decision:** Schema flexibility and debuggability more important than size/speed for raw logs.
 
 ### Why Parquet?
 
 **Pros:**
-- ✅ Columnar (fast queries)
-- ✅ Compressed (10:1)
-- ✅ Self-describing schema
-- ✅ Industry standard
+- Columnar format (efficient for analytics)
+- Excellent compression (10:1 typical)
+- Self-describing (schema embedded)
+- Industry standard (Spark, DuckDB, Snowflake all support)
+- Partition pruning (skip files/row groups)
 
 **Cons:**
-- ⚠️ Not human-readable
-- ⚠️ Requires tools to inspect
+- Not human-readable
+- Write-once (can't append)
 
-**Alternatives Considered:**
-- CSV: Not typed, not compressed
-- Avro: Row-based, slower queries
-- ORC: Less tooling support
+**Decision:** Perfect fit for compacted, immutable log data.
+
+### Why DuckDB?
+
+**Pros:**
+- Embedded (no server to manage)
+- Native S3 support
+- Full SQL support
+- Columnar engine (fast aggregations)
+- Small binary (~50MB)
+- MIT license
+
+**Cons:**
+- Not distributed (single-node only)
+- Embedded (can't share connections)
+
+**Decision:** Simplicity and SQL compatibility more important than distributed queries for log analytics.
 
 ### Why Go?
 
 **Pros:**
-- ✅ Fast compilation
-- ✅ Static binary (easy deploy)
-- ✅ Great concurrency
-- ✅ Good S3 libraries
+- Single binary (no dependencies)
+- Fast compilation
+- Good stdlib (HTTP, JSON, CLI)
+- Cross-platform
+- Memory safe
 
 **Cons:**
-- ⚠️ Verbose error handling
-- ⚠️ No generics (until 1.18)
+- Verbose error handling
+- No generics (until 1.18+)
 
-**Alternatives Considered:**
-- Python: Slower, requires runtime
-- Rust: Steeper learning curve
-- Java: Heavier runtime
+**Decision:** Operational simplicity (single binary) is critical for HPC deployments.
 
----
+### Why Vector/FluentBit?
 
-## Deployment Patterns
+**Decision:** Use existing, battle-tested collectors rather than building our own.
 
-### Pattern 1: Single Node
-
-```
-┌─────────────────────────────────┐
-│        Single Server            │
-│  ┌──────────┐  ┌──────────┐   │
-│  │Collector │  │Compactor │   │
-│  │(Vector)  │  │(cron)    │   │
-│  └──────────┘  └──────────┘   │
-│                                 │
-│  Users SSH in and run:          │
-│  $ openchami-logq-query sql ... │
-└─────────────────────────────────┘
-         │
-         v
-    ┌─────────┐
-    │ S3/VGW  │
-    └─────────┘
-```
-
-**Pros:** Simple, cheap
-**Cons:** Single point of failure
-
-### Pattern 2: Kubernetes
-
-```
-┌────────────────────────────────────┐
-│         Kubernetes Cluster         │
-│  ┌────────────┐  ┌──────────────┐ │
-│  │ Collector  │  │  Compactor   │ │
-│  │ DaemonSet  │  │  CronJob     │ │
-│  └────────────┘  └──────────────┘ │
-│                                    │
-│  ┌────────────────────────────┐   │
-│  │  Query Job (on-demand)     │   │
-│  │  kubectl run query --image=│   │
-│  └────────────────────────────┘   │
-└────────────────────────────────────┘
-         │
-         v
-    ┌─────────┐
-    │   S3    │
-    └─────────┘
-```
-
-**Pros:** Scalable, managed
-**Cons:** Complex, expensive
-
-### Pattern 3: Serverless (Future)
-
-```
-┌──────────────────────────────────┐
-│      AWS Lambda/Functions        │
-│  ┌────────────┐  ┌────────────┐ │
-│  │ Collector  │  │ Compactor  │ │
-│  │ (trigger)  │  │ (schedule) │ │
-│  └────────────┘  └────────────┘ │
-│                                  │
-│  ┌────────────────────────────┐ │
-│  │  Query API (HTTP endpoint) │ │
-│  └────────────────────────────┘ │
-└──────────────────────────────────┘
-         │
-         v
-    ┌─────────┐
-    │   S3    │
-    └─────────┘
-```
-
-**Pros:** Auto-scaling, pay-per-use
-**Cons:** Cold starts, vendor lock-in
+**Rationale:**
+- Mature projects with wide adoption
+- Support many log sources (syslog, journald, files, etc.)
+- Built-in buffering and retry logic
+- Active development and community
 
 ---
 
-## Future Architecture
+## Related Documentation
 
-### Phase 6: Web UI
-
-```
-┌────────────────┐
-│   Web UI       │
-│ (React + API)  │
-└───────┬────────┘
-        │
-        v
-┌────────────────┐
-│  Query API     │
-│ (Go + HTTP)    │
-└───────┬────────┘
-        │
-        v
-┌────────────────┐
-│    DuckDB      │
-└────────────────┘
-```
-
-### Phase 7: Real-Time Queries
-
-```
-┌────────────┐
-│  Collector │──> S3 (batch)
-└────────────┘
-      │
-      └──────────> Kafka (stream)
-                      │
-                      v
-                 ┌────────────┐
-                 │  DuckDB    │
-                 │  + Kafka   │
-                 │  Connector │
-                 └────────────┘
-```
-
-### Phase 8: Alerts
-
-```
-┌────────────┐
-│  Query     │──> Check thresholds
-└────────────┘        │
-                      v
-                 ┌────────────┐
-                 │ Alertmanager│
-                 └────────────┘
-                      │
-                      v
-                 Slack/PagerDuty
-```
+- **[User Guide](USER_GUIDE.md)** - Query patterns and SQL examples
+- **[Operations Guide](OPERATIONS.md)** - Deployment and configuration
+- **[Developer Guide](DEVELOPMENT.md)** - Development setup
 
 ---
 
-## Conclusion
-
-openchami-logq is designed for simplicity and cost-effectiveness over performance. It trades real-time queries for cheap storage and zero maintenance.
-
-**Key Architectural Decisions:**
-1. ✅ S3 for cheap, scalable storage
-2. ✅ NDJSON for schema flexibility
-3. ✅ Parquet for query performance
-4. ✅ DuckDB for embedded analytics
-5. ✅ Streaming pipelines for constant memory
-
-**When to Use:**
-- Long-term log retention
-- Ad-hoc analysis
-- Compliance/auditing
-- Cost-sensitive environments
-
-**When NOT to Use:**
-- Real-time dashboards
-- High-frequency queries
-- Sub-second latency requirements
-- Complex JOINs across datasets
-
----
-
-**Questions or feedback?** Open an issue on GitHub!
+**Questions?** Open an issue on [GitHub](https://github.com/OpenCHAMI/legendary-funicular/issues)!

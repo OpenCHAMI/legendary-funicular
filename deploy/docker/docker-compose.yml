@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # S3 Storage (VersityGW)
+  versitygw:
+    image: versity/versitygw:latest
+    ports:
+      - "7070:7070"
+    environment:
+      - VERSITY_GW_ENDPOINT=:7070
+      - VERSITY_GW_ACCESS_KEY=admin
+      - VERSITY_GW_SECRET_KEY=admin-secret
+    volumes:
+      - versity-data:/data
+    restart: unless-stopped
+
+  # Log Collector (Vector)
+  vector:
+    image: timberio/vector:latest
+    ports:
+      - "514:514/tcp"
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+    environment:
+      - S3_ENDPOINT=http://versitygw:7070
+      - S3_ACCESS_KEY=log-writer
+      - S3_SECRET_KEY=log-writer-secret
+    depends_on:
+      - versitygw
+    restart: unless-stopped
+
+  # Compactor (runs on schedule)
+  compactor:
+    image: ghcr.io/openchami/logq-compactor:latest
+    environment:
+      - S3_ENDPOINT=http://versitygw:7070
+      - S3_ACCESS_KEY=log-compactor
+      - S3_SECRET_KEY=log-compactor-secret
+      - S3_BUCKET_RAW=openchami-logs-raw
+      - S3_BUCKET_COMPACTED=openchami-logs-daily
+      - S3_SSL=false
+    depends_on:
+      - versitygw
+    restart: on-failure
+    # Note: Schedule with external cron/timer or use docker-compose with ofelia scheduler
+
+volumes:
+  versity-data:
