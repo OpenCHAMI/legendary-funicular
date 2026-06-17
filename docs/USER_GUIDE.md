@@ -6,1106 +6,244 @@ SPDX-License-Identifier: MIT
 
 # User Guide
 
-**Project:** openchami-logq
-**Version:** 1.0
-**Last Updated:** June 10, 2026
-
----
+Advanced usage guide for openchami-logq. For basic usage and installation, see the [main README](../README.md).
 
 ## Table of Contents
 
-1. [Getting Started](#getting-started)
-2. [Installation](#installation)
-3. [Configuration](#configuration)
-4. [Basic Usage](#basic-usage)
-5. [SQL Queries](#sql-queries)
-6. [Reports](#reports)
-7. [Inspection](#inspection)
-8. [Output Formats](#output-formats)
-9. [Advanced Usage](#advanced-usage)
-10. [Troubleshooting](#troubleshooting)
-11. [Best Practices](#best-practices)
-12. [FAQ](#faq)
+1. [Advanced SQL Examples](#advanced-sql-examples)
+2. [DuckDB Best Practices](#duckdb-best-practices)
+3. [FAQ](#faq)
 
 ---
 
-## Getting Started
+## Advanced SQL Examples
 
-### What is openchami-logq?
+### Window Functions
 
-openchami-logq is a log lake query tool that lets you:
-
-- **Store** all your logs cheaply in S3
-- **Query** them with SQL using DuckDB
-- **Analyze** HPC cluster logs without complex infrastructure
-
-### Quick Example
-
+Calculate running totals:
 ```bash
-# Query recent errors
-openchami-logq-query sql \
-  "SELECT ts, host, level, msg
-   FROM SOURCES
-   WHERE level = 'ERROR'
-   ORDER BY ts DESC
-   LIMIT 10"
+openchami-logq-query sql "
+  SELECT
+    ts,
+    host,
+    COUNT(*) OVER (PARTITION BY host ORDER BY ts) as running_count
+  FROM SOURCES
+  WHERE ts >= '2026-06-10'
+  ORDER BY ts"
 ```
 
-### Prerequisites
-
-Before you begin, you need:
-
-1. **S3-compatible storage** (VersityGW, MinIO, or AWS S3)
-2. **Access credentials** (access key + secret key)
-3. **Data in S3** (from collector or sample data)
-
----
-
-## Installation
-
-### Option 1: Install Script (Recommended)
-
-The easiest way to install:
-
+Find the last error for each host:
 ```bash
-curl -sSL https://raw.githubusercontent.com/OpenCHAMI/legendary-funicular/main/installer.bash | bash
+openchami-logq-query sql "
+  SELECT * FROM (
+    SELECT
+      *,
+      ROW_NUMBER() OVER (PARTITION BY host ORDER BY ts DESC) as rn
+    FROM SOURCES
+    WHERE level = 'ERROR'
+  ) WHERE rn = 1"
 ```
 
-This installs both binaries to `/usr/local/bin/`:
-- `openchami-logq-query` - Query tool
-- `openchami-logq-compactor` - Compaction service
+### Common Table Expressions (CTEs)
 
-### Option 2: Build from Source
-
-If you have Go 1.23+ installed:
-
+Multi-step analysis:
 ```bash
-# Clone repository
-git clone https://github.com/OpenCHAMI/legendary-funicular.git
-cd legendary-funicular
-
-# Build binaries
-make build
-
-# Install to system
-sudo cp bin/openchami-logq-* /usr/local/bin/
-
-# Verify installation
-openchami-logq-query version
-```
-
-### Option 3: Docker
-
-Run in a container:
-
-```bash
-# Pull image
-docker pull ghcr.io/openchami/logq-query:latest
-
-# Run query
-docker run --rm \
-  -e S3_ENDPOINT="http://host.docker.internal:7070" \
-  -e S3_ACCESS_KEY="your-key" \
-  -e S3_SECRET_KEY="your-secret" \
-  ghcr.io/openchami/logq-query:latest \
-  sql "SELECT COUNT(*) FROM SOURCES"
-```
-
-### Option 4: RPM Package (Coming Soon)
-
-```bash
-# RPM packaging in progress
-sudo yum install openchami-logq
-```
-
-### Verify Installation
-
-```bash
-# Check version
-openchami-logq-query version
-
-# Check help
-openchami-logq-query --help
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create `~/.openchami-logq.env`:
-
-```bash
-# S3 Configuration (Required)
-export S3_ENDPOINT="http://localhost:7070"
-export S3_REGION="us-east-1"
-export S3_ACCESS_KEY="your-access-key"
-export S3_SECRET_KEY="your-secret-key"
-
-# Bucket Names (Optional - these are defaults)
-export S3_BUCKET_RAW="openchami-logs-raw"
-export S3_BUCKET_COMPACTED="openchami-logs-daily"
-
-# SSL/TLS (Optional - default is true)
-export S3_SSL="false"  # Set to true for HTTPS
-
-# Query Defaults (Optional)
-export LOGQ_FORMAT="json"        # or ndjson
-export LOGQ_SCOPE="compacted"    # or raw or all
-export LOGQ_STREAM="logs"        # or events
-```
-
-Load the configuration:
-
-```bash
-source ~/.openchami-logq.env
-```
-
-### CLI Flags Override
-
-All environment variables can be overridden with CLI flags:
-
-```bash
-openchami-logq-query sql \
-  --endpoint "http://other-server:7070" \
-  --access-key "different-key" \
-  --secret-key "different-secret" \
-  --scope compacted \
-  --stream logs \
-  --format json \
-  "SELECT * FROM SOURCES LIMIT 10"
-```
-
-### Configuration Priority
-
-Configuration is loaded in this order (later overrides earlier):
-
-1. Default values
-2. Environment variables
-3. CLI flags
-
-### Verify Configuration
-
-Check your configuration:
-
-```bash
-openchami-logq-query inspect config
-```
-
-Output:
-```json
-{
-  "s3_endpoint": "http://localhost:7070",
-  "s3_region": "us-east-1",
-  "s3_bucket_raw": "openchami-logs-raw",
-  "s3_bucket_compacted": "openchami-logs-daily",
-  "s3_ssl": false,
-  "format": "json",
-  "scope": "compacted",
-  "stream": "logs"
-}
-```
-
----
-
-## Basic Usage
-
-### Command Structure
-
-```
-openchami-logq-query [global-flags] <command> [command-flags] [args]
-```
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `sql` | Execute SQL queries |
-| `report` | Run built-in reports |
-| `inspect` | Inspect data and configuration |
-| `dump` | Dump raw data (debugging) |
-| `version` | Show version information |
-
-### Global Flags
-
-| Flag | Short | Description | Default |
-|------|-------|-------------|---------|
-| `--scope` | `-S` | Data scope (all, compacted, raw) | `compacted` |
-| `--stream` | `-s` | Data stream (logs, events) | `logs` |
-| `--format` | `-f` | Output format (json, ndjson) | `json` |
-| `--output` | `-o` | Output file path | stdout |
-
-### Your First Query
-
-**Count all logs:**
-```bash
-openchami-logq-query sql "SELECT COUNT(*) as total FROM SOURCES"
-```
-
-**View recent logs:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   ORDER BY ts DESC
-   LIMIT 10"
-```
-
-**Filter by level:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE level = 'ERROR'
-   LIMIT 10"
-```
-
----
-
-## SQL Queries
-
-### Basic SELECT
-
-**All columns:**
-```bash
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 10"
-```
-
-**Specific columns:**
-```bash
-openchami-logq-query sql \
-  "SELECT ts, host, level, msg FROM SOURCES LIMIT 10"
-```
-
-### WHERE Clause
-
-**Filter by level:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE level = 'ERROR'"
-```
-
-**Filter by host:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE host = 'node01'"
-```
-
-**Multiple conditions:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE level = 'ERROR'
-   AND host LIKE 'node%'"
-```
-
-### Time Ranges
-
-**Specific date:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE ts >= '2026-06-10'
-   AND ts < '2026-06-11'"
-```
-
-**Last 24 hours:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE ts > NOW() - INTERVAL 24 HOUR"
-```
-
-**Date range:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE ts BETWEEN '2026-06-01' AND '2026-06-10'"
-```
-
-### Aggregations
-
-**Count by level:**
-```bash
-openchami-logq-query sql \
-  "SELECT level, COUNT(*) as count
-   FROM SOURCES
-   GROUP BY level
-   ORDER BY count DESC"
-```
-
-**Count by host:**
-```bash
-openchami-logq-query sql \
-  "SELECT host, COUNT(*) as count
-   FROM SOURCES
-   GROUP BY host
-   ORDER BY count DESC"
-```
-
-**Hourly counts:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     DATE_TRUNC('hour', ts) as hour,
-     COUNT(*) as count
-   FROM SOURCES
-   GROUP BY hour
-   ORDER BY hour"
-```
-
-### Sorting
-
-**Newest first:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES ORDER BY ts DESC LIMIT 10"
-```
-
-**Oldest first:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES ORDER BY ts ASC LIMIT 10"
-```
-
-**Multiple columns:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES ORDER BY level, ts DESC"
-```
-
-### LIMIT and OFFSET
-
-**First 10 rows:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 10"
-```
-
-**Pagination:**
-```bash
-# Page 1 (rows 1-10)
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 10 OFFSET 0"
-
-# Page 2 (rows 11-20)
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 10 OFFSET 10"
-
-# Page 3 (rows 21-30)
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 10 OFFSET 20"
+openchami-logq-query sql "
+  WITH error_counts AS (
+    SELECT host, COUNT(*) as errors
+    FROM SOURCES
+    WHERE level = 'ERROR'
+    GROUP BY host
+  ),
+  total_counts AS (
+    SELECT host, COUNT(*) as total
+    FROM SOURCES
+    GROUP BY host
+  )
+  SELECT
+    e.host,
+    e.errors,
+    t.total,
+    ROUND(100.0 * e.errors / t.total, 2) as error_rate
+  FROM error_counts e
+  JOIN total_counts t ON e.host = t.host
+  ORDER BY error_rate DESC"
 ```
 
 ### JSON Field Extraction
 
-**Extract JSON field:**
+Extract nested fields:
 ```bash
-openchami-logq-query sql \
-  "SELECT
-     json_extract_string(data, '$.user') as user,
-     COUNT(*) as count
-   FROM SOURCES
-   WHERE data IS NOT NULL
-   GROUP BY user"
-```
-
-**Extract nested field:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     json_extract_string(data, '$.request.method') as method,
-     json_extract_string(data, '$.request.path') as path
-   FROM SOURCES"
-```
-
-### Pattern Matching
-
-**LIKE operator:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE msg LIKE '%error%'"
-```
-
-**Case-insensitive:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE LOWER(msg) LIKE '%error%'"
-```
-
-**Multiple patterns:**
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE msg LIKE '%error%'
-   OR msg LIKE '%fail%'"
-```
-
-### DISTINCT Values
-
-**Unique hosts:**
-```bash
-openchami-logq-query sql \
-  "SELECT DISTINCT host FROM SOURCES ORDER BY host"
-```
-
-**Unique levels:**
-```bash
-openchami-logq-query sql \
-  "SELECT DISTINCT level FROM SOURCES ORDER BY level"
-```
-
-### Subqueries
-
-**Top 10 hosts by error count:**
-```bash
-openchami-logq-query sql \
-  "SELECT host, error_count
-   FROM (
-     SELECT host, COUNT(*) as error_count
-     FROM SOURCES
-     WHERE level = 'ERROR'
-     GROUP BY host
-   )
-   ORDER BY error_count DESC
-   LIMIT 10"
-```
-
-### SOURCES Placeholder
-
-The `SOURCES` keyword is automatically replaced with the correct S3 paths based on your flags:
-
-```bash
-# Queries compacted logs
-openchami-logq-query sql --scope compacted --stream logs \
-  "SELECT * FROM SOURCES"
-# Becomes: SELECT * FROM read_parquet('s3://bucket/logs/*.parquet')
-
-# Queries raw NDJSON
-openchami-logq-query sql --scope raw --stream logs \
-  "SELECT * FROM SOURCES"
-# Becomes: SELECT * FROM read_json('s3://bucket-raw/logs/**/*.ndjson.zst')
-
-# Queries both logs and events
-openchami-logq-query sql --stream logs,events \
-  "SELECT * FROM SOURCES"
-# Becomes: SELECT * FROM (...) UNION ALL BY NAME SELECT * FROM (...)
-```
-
----
-
-## Reports
-
-Reports are pre-built queries for common tasks.
-
-### List Reports
-
-```bash
-openchami-logq-query report list
-```
-
-Output:
-```
-Available reports:
-  - find-all-parse-errors: Find all logs with parse errors
-  - find-all-service-errors: Find all service errors grouped by service
-  - count-by-level: Count logs by level
-  - top-hosts: Top 10 hosts by log volume
-```
-
-### Describe Report
-
-```bash
-openchami-logq-query report describe find-all-service-errors
-```
-
-Output:
-```
-Report: find-all-service-errors
-Description: Find all service errors grouped by service
-Parameters: (none)
-Query:
+openchami-logq-query sql "
   SELECT
-    service,
-    COUNT(*) as error_count,
-    MIN(ts) as first_seen,
-    MAX(ts) as last_seen
+    json_extract_string(data, '$.user.name') as username,
+    json_extract_string(data, '$.user.id') as user_id,
+    json_extract(data, '$.metadata.tags') as tags,
+    COUNT(*) as count
+  FROM SOURCES
+  WHERE data IS NOT NULL
+  GROUP BY username, user_id, tags"
+```
+
+### Array Operations
+
+Work with array fields:
+```bash
+openchami-logq-query sql "
+  SELECT
+    host,
+    UNNEST(json_extract(data, '$.errors')) as error
+  FROM SOURCES
+  WHERE json_extract(data, '$.errors') IS NOT NULL"
+```
+
+### Date/Time Operations
+
+Group by custom intervals:
+```bash
+openchami-logq-query sql "
+  SELECT
+    DATE_TRUNC('minute', ts) as minute,
+    DATE_TRUNC('hour', ts) as hour,
+    DATE_TRUNC('day', ts) as day,
+    COUNT(*) as count
+  FROM SOURCES
+  WHERE ts >= NOW() - INTERVAL 7 DAY
+  GROUP BY minute, hour, day"
+```
+
+Calculate time differences:
+```bash
+openchami-logq-query sql "
+  SELECT
+    host,
+    ts,
+    LAG(ts) OVER (PARTITION BY host ORDER BY ts) as prev_ts,
+    EPOCH(ts - LAG(ts) OVER (PARTITION BY host ORDER BY ts)) as seconds_since_last
   FROM SOURCES
   WHERE level = 'ERROR'
-  AND service IS NOT NULL
-  GROUP BY service
-  ORDER BY error_count DESC
+  ORDER BY host, ts"
 ```
 
-### Run Report
+### String Operations
 
+Pattern matching and extraction:
 ```bash
-openchami-logq-query report run find-all-service-errors
+openchami-logq-query sql "
+  SELECT
+    msg,
+    REGEXP_EXTRACT(msg, 'error code: ([0-9]+)', 1) as error_code,
+    REGEXP_MATCHES(msg, 'timeout|failed|error') as is_error
+  FROM SOURCES
+  WHERE msg IS NOT NULL
+  LIMIT 100"
 ```
 
-### Report with Parameters (Future)
+### Aggregations
 
+Statistical functions:
 ```bash
-# Future: Reports with parameters
-openchami-logq-query report run errors-by-host --param host=node01
+openchami-logq-query sql "
+  SELECT
+    host,
+    COUNT(*) as count,
+    MIN(ts) as first_seen,
+    MAX(ts) as last_seen,
+    APPROX_COUNT_DISTINCT(msg) as unique_messages,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY LENGTH(msg)) as median_msg_length
+  FROM SOURCES
+  GROUP BY host"
 ```
 
-### Built-in Reports
+### Cross-Stream Queries
 
-#### find-all-parse-errors
-
-Find logs that failed to parse:
-
+Join logs and events:
 ```bash
-openchami-logq-query report run find-all-parse-errors
-```
-
-**Use case:** Identify malformed logs that need investigation.
-
-#### find-all-service-errors
-
-Find errors grouped by service:
-
-```bash
-openchami-logq-query report run find-all-service-errors
-```
-
-**Use case:** Identify which services have the most errors.
-
-#### count-by-level
-
-Count logs by level:
-
-```bash
-openchami-logq-query report run count-by-level
-```
-
-**Use case:** Quick overview of log distribution.
-
-#### top-hosts
-
-Top 10 hosts by log volume:
-
-```bash
-openchami-logq-query report run top-hosts
-```
-
-**Use case:** Identify noisy hosts.
-
----
-
-## Inspection
-
-Inspection commands help you understand your data.
-
-### Inspect Dates
-
-See which dates have data:
-
-```bash
-openchami-logq-query inspect dates
-```
-
-Output:
-```json
-{
-  "scope": "compacted",
-  "stream": "logs",
-  "dates": [
-    "2026-06-01",
-    "2026-06-02",
-    "2026-06-03",
-    "2026-06-10"
-  ]
-}
-```
-
-**With specific stream:**
-```bash
-openchami-logq-query inspect dates --stream events
-```
-
-### Inspect Schema
-
-See the schema of your data:
-
-```bash
-openchami-logq-query inspect schema
-```
-
-Output:
-```json
-{
-  "scope": "compacted",
-  "stream": "logs",
-  "schema": {
-    "ts": "TIMESTAMP",
-    "host": "VARCHAR",
-    "level": "VARCHAR",
-    "facility": "VARCHAR",
-    "severity": "VARCHAR",
-    "msg": "VARCHAR",
-    "data": "JSON",
-    "parse_error": "VARCHAR"
-  }
-}
-```
-
-### Inspect Configuration
-
-See your current configuration:
-
-```bash
-openchami-logq-query inspect config
-```
-
-Output:
-```json
-{
-  "s3_endpoint": "http://localhost:7070",
-  "s3_region": "us-east-1",
-  "s3_bucket_raw": "openchami-logs-raw",
-  "s3_bucket_compacted": "openchami-logs-daily",
-  "s3_ssl": false,
-  "format": "json",
-  "scope": "compacted",
-  "stream": "logs"
-}
+openchami-logq-query sql --stream logs,events "
+  SELECT
+    CASE
+      WHEN type IS NOT NULL THEN 'event'
+      ELSE 'log'
+    END as source_type,
+    COALESCE(type, level) as category,
+    COUNT(*) as count
+  FROM SOURCES
+  GROUP BY source_type, category
+  ORDER BY count DESC"
 ```
 
 ---
 
-## Output Formats
-
-### JSON (Default)
-
-Output as JSON array:
-
-```bash
-openchami-logq-query sql --format json \
-  "SELECT * FROM SOURCES LIMIT 2"
-```
-
-Output:
-```json
-[
-  {"ts":"2026-06-10T12:00:00Z","host":"node01","level":"INFO","msg":"Started"},
-  {"ts":"2026-06-10T12:00:01Z","host":"node02","level":"ERROR","msg":"Failed"}
-]
-```
-
-**Pros:**
-- ✅ Valid JSON (can parse as array)
-- ✅ Easy to pretty-print
-
-**Cons:**
-- ⚠️ Entire result in memory
-- ⚠️ Large results can be slow
-
-### NDJSON (Streaming)
-
-Output as newline-delimited JSON:
-
-```bash
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES LIMIT 2"
-```
-
-Output:
-```json
-{"ts":"2026-06-10T12:00:00Z","host":"node01","level":"INFO","msg":"Started"}
-{"ts":"2026-06-10T12:00:01Z","host":"node02","level":"ERROR","msg":"Failed"}
-```
-
-**Pros:**
-- ✅ Streaming (constant memory)
-- ✅ Fast for large results
-- ✅ Easy to process line-by-line
-
-**Cons:**
-- ⚠️ Not valid JSON array
-- ⚠️ Requires NDJSON-aware tools
-
-### Output to File
-
-Save output to file:
-
-```bash
-openchami-logq-query sql --output results.json \
-  "SELECT * FROM SOURCES LIMIT 1000"
-```
-
-Or use shell redirection:
-
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 1000" > results.json
-```
-
-### Pipe to jq
-
-Process with jq:
-
-```bash
-# Pretty-print JSON
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 10" | jq '.'
-
-# Filter with jq
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 100" | \
-  jq '.[] | select(.level=="ERROR")'
-
-# Extract field
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 100" | \
-  jq -r '.[] | .msg'
-```
-
-### Pipe to Other Tools
-
-**Count lines (NDJSON):**
-```bash
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES WHERE level='ERROR'" | wc -l
-```
-
-**Grep for pattern:**
-```bash
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES" | grep -i "timeout"
-```
-
-**Process with awk:**
-```bash
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES" | \
-  awk -F'"' '{print $4}'  # Extract second field
-```
-
----
-
-## Advanced Usage
-
-### Multi-Stream Queries
-
-Query both logs and events:
-
-```bash
-openchami-logq-query sql --stream logs,events \
-  "SELECT * FROM SOURCES LIMIT 10"
-```
-
-This creates a UNION of both streams.
-
-### Raw Data Queries
-
-Query raw NDJSON (before compaction):
-
-```bash
-openchami-logq-query sql --scope raw \
-  "SELECT * FROM SOURCES WHERE ts > '2026-06-10T12:00:00Z'"
-```
-
-**Use case:** Query very recent data (not yet compacted).
-
-### All Data Queries
-
-Query both raw and compacted:
-
-```bash
-openchami-logq-query sql --scope all \
-  "SELECT * FROM SOURCES"
-```
-
-**Use case:** Complete view of all data.
-
-### Complex Aggregations
-
-**Error rate over time:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     DATE_TRUNC('hour', ts) as hour,
-     COUNT(*) as total,
-     SUM(CASE WHEN level = 'ERROR' THEN 1 ELSE 0 END) as errors,
-     ROUND(100.0 * errors / total, 2) as error_rate
-   FROM SOURCES
-   GROUP BY hour
-   ORDER BY hour"
-```
-
-**Top error messages:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     msg,
-     COUNT(*) as count,
-     COUNT(DISTINCT host) as affected_hosts
-   FROM SOURCES
-   WHERE level = 'ERROR'
-   GROUP BY msg
-   ORDER BY count DESC
-   LIMIT 10"
-```
-
-### Window Functions
-
-**Rank hosts by log volume:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     host,
-     COUNT(*) as log_count,
-     RANK() OVER (ORDER BY COUNT(*) DESC) as rank
-   FROM SOURCES
-   GROUP BY host
-   ORDER BY rank"
-```
-
-**Running total:**
-```bash
-openchami-logq-query sql \
-  "SELECT
-     DATE_TRUNC('day', ts) as day,
-     COUNT(*) as daily_count,
-     SUM(COUNT(*)) OVER (ORDER BY day) as cumulative_count
-   FROM SOURCES
-   GROUP BY day
-   ORDER BY day"
-```
-
-### Performance Optimization
-
-**Use WHERE to filter early:**
-```bash
-# Good: Filter before aggregation
-openchami-logq-query sql \
-  "SELECT host, COUNT(*)
-   FROM SOURCES
-   WHERE ts > '2026-06-10'
-   GROUP BY host"
-
-# Bad: Filter after aggregation
-openchami-logq-query sql \
-  "SELECT host, COUNT(*)
-   FROM (SELECT * FROM SOURCES WHERE ts > '2026-06-10')
-   GROUP BY host"
-```
-
-**Select only needed columns:**
-```bash
-# Good: Only select needed columns
-openchami-logq-query sql \
-  "SELECT ts, host, msg FROM SOURCES"
-
-# Bad: Select all then filter
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES" | jq '.[] | {ts, host, msg}'
-```
-
-**Use LIMIT for exploration:**
-```bash
-# Good: Limit results
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 100"
-
-# Bad: Return everything
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES"
-```
-
----
-
-## Troubleshooting
-
-### Error: S3 access denied
-
-**Problem:**
-```
-Error: S3 access denied: Access Denied
-```
-
-**Solution:**
-1. Check credentials:
-   ```bash
-   echo $S3_ACCESS_KEY
-   echo $S3_SECRET_KEY
-   ```
-
-2. Verify S3 access:
-   ```bash
-   aws s3 ls s3://openchami-logs-daily \
-     --endpoint-url=$S3_ENDPOINT
-   ```
-
-3. Check IAM policy (user needs `s3:GetObject`, `s3:ListBucket`)
-
-### Error: Connection refused
-
-**Problem:**
-```
-Error: Connection refused
-```
-
-**Solution:**
-1. Check endpoint:
-   ```bash
-   echo $S3_ENDPOINT
-   curl $S3_ENDPOINT  # Should return something
-   ```
-
-2. Check VersityGW is running:
-   ```bash
-   systemctl status versitygw
-   ```
-
-3. Check SSL setting:
-   ```bash
-   # If using HTTP (not HTTPS)
-   export S3_SSL="false"
-   ```
-
-### Error: No data returned
-
-**Problem:**
-Query returns empty result.
-
-**Solution:**
-1. Check available dates:
-   ```bash
-   openchami-logq-query inspect dates
-   ```
-
-2. Verify data exists:
-   ```bash
-   aws s3 ls s3://openchami-logs-daily/logs/ \
-     --endpoint-url=$S3_ENDPOINT
-   ```
-
-3. Check scope:
-   ```bash
-   # Try raw data
-   openchami-logq-query sql --scope raw \
-     "SELECT * FROM SOURCES LIMIT 10"
-   ```
-
-### Error: Invalid SQL
-
-**Problem:**
-```
-Error: Parser Error: syntax error at or near "..."
-```
-
-**Solution:**
-1. Check SQL syntax:
-   ```bash
-   # Test with simple query first
-   openchami-logq-query sql "SELECT 1"
-   ```
-
-2. Quote strings properly:
-   ```bash
-   # Good
-   "SELECT * FROM SOURCES WHERE level = 'ERROR'"
-
-   # Bad
-   "SELECT * FROM SOURCES WHERE level = ERROR"
-   ```
-
-3. Use SOURCES placeholder:
-   ```bash
-   # Good
-   "SELECT * FROM SOURCES"
-
-   # Bad
-   "SELECT * FROM logs"  # Don't use table name directly
-   ```
-
-### Slow Queries
-
-**Problem:**
-Query takes a long time.
-
-**Solution:**
-1. Add WHERE clause to filter early:
-   ```bash
-   # Filter by date first
-   "SELECT * FROM SOURCES WHERE ts > '2026-06-10'"
-   ```
-
-2. Use LIMIT for exploration:
-   ```bash
-   "SELECT * FROM SOURCES LIMIT 100"
-   ```
-
-3. Check data size:
-   ```bash
-   # How much data are you querying?
-   openchami-logq-query sql \
-     "SELECT COUNT(*) FROM SOURCES"
-   ```
-
----
-
-## Best Practices
+## DuckDB Best Practices
 
 ### 1. Always Use WHERE for Time Ranges
 
 **Good:**
 ```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE ts >= '2026-06-10' AND ts < '2026-06-11'"
+openchami-logq-query sql "
+  SELECT * FROM SOURCES
+  WHERE ts >= '2026-06-10' AND ts < '2026-06-11'"
 ```
 
-**Why:** DuckDB can skip reading Parquet files outside the time range (partition pruning).
+**Why:** DuckDB can skip reading Parquet files outside the time range (partition pruning). This dramatically improves query performance.
+
+**Impact:** Can reduce query time from minutes to seconds for large datasets.
 
 ### 2. Use LIMIT for Exploration
 
 **Good:**
 ```bash
 # First, explore with LIMIT
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES LIMIT 100"
+openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 100"
 
 # Then, run full query if needed
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE level='ERROR'"
+openchami-logq-query sql "SELECT * FROM SOURCES WHERE level='ERROR'"
 ```
 
-**Why:** Avoid accidentally downloading gigabytes of data.
+**Why:** Avoid accidentally downloading gigabytes of data while exploring.
 
 ### 3. Select Only Needed Columns
 
 **Good:**
 ```bash
-openchami-logq-query sql \
-  "SELECT ts, host, msg FROM SOURCES"
+openchami-logq-query sql "SELECT ts, host, msg FROM SOURCES"
 ```
 
 **Bad:**
 ```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES"
+openchami-logq-query sql "SELECT * FROM SOURCES"
 ```
 
-**Why:** DuckDB only reads the columns you select (columnar format).
+**Why:** DuckDB only reads the columns you select (columnar format). Selecting fewer columns = less data transferred from S3 = faster queries.
+
+**Impact:** Can reduce data transfer by 90%+ for wide tables.
 
 ### 4. Use NDJSON for Large Results
 
 **Good:**
 ```bash
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES" > large-results.ndjson
+openchami-logq-query sql --format ndjson "
+  SELECT * FROM SOURCES" > large-results.ndjson
 ```
 
-**Why:** Streaming format, constant memory.
+**Why:**
+- Streaming format with constant memory usage
+- Can process results line-by-line with `jq` or other tools
+- No need to load entire result set into memory
 
-### 5. Use Reports for Common Queries
+**Impact:** Can query datasets larger than available RAM.
+
+### 5. Use Built-in Reports
 
 **Good:**
 ```bash
 openchami-logq-query report run find-all-service-errors
 ```
 
-**Why:** Consistent, tested, and documented.
+**Why:** Reports are:
+- Pre-tested and optimized
+- Documented with expected output
+- Consistent across users
 
 ### 6. Check Available Dates First
 
@@ -1115,11 +253,11 @@ openchami-logq-query report run find-all-service-errors
 openchami-logq-query inspect dates
 
 # Then query specific date
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE ts >= '2026-06-10'"
+openchami-logq-query sql "
+  SELECT * FROM SOURCES WHERE ts >= '2026-06-10'"
 ```
 
-**Why:** Avoid querying dates with no data.
+**Why:** Avoid querying dates with no data or querying more data than necessary.
 
 ### 7. Use Environment Variables
 
@@ -1128,6 +266,7 @@ openchami-logq-query sql \
 # Set once
 export S3_ENDPOINT="http://localhost:7070"
 export S3_ACCESS_KEY="..."
+export S3_SECRET_KEY="..."
 
 # Use many times
 openchami-logq-query sql "SELECT * FROM SOURCES"
@@ -1135,20 +274,58 @@ openchami-logq-query sql "SELECT * FROM SOURCES"
 
 **Why:** Don't repeat configuration on every command.
 
-### 8. Test Queries on Compacted Data
+### 8. Test Queries on Compacted Data First
 
 **Good:**
 ```bash
 # Test on compacted data first (faster)
-openchami-logq-query sql --scope compacted \
-  "SELECT * FROM SOURCES LIMIT 10"
+openchami-logq-query sql --scope compacted "
+  SELECT * FROM SOURCES LIMIT 10"
 
 # Then query raw if needed
-openchami-logq-query sql --scope raw \
-  "SELECT * FROM SOURCES WHERE ts > NOW() - INTERVAL 1 HOUR"
+openchami-logq-query sql --scope raw "
+  SELECT * FROM SOURCES WHERE ts > NOW() - INTERVAL 1 HOUR"
 ```
 
-**Why:** Compacted data is faster to query (Parquet vs NDJSON).
+**Why:**
+- Compacted data (Parquet) is 10-20x faster to query than raw data (NDJSON)
+- Use raw data only for very recent logs (last few hours)
+
+### 9. Use APPROX Functions for Large Datasets
+
+**Good:**
+```bash
+openchami-logq-query sql "
+  SELECT APPROX_COUNT_DISTINCT(host) as approx_hosts FROM SOURCES"
+```
+
+**Better than:**
+```bash
+openchami-logq-query sql "
+  SELECT COUNT(DISTINCT host) as exact_hosts FROM SOURCES"
+```
+
+**Why:** APPROX functions are much faster and use less memory. Error rate is typically <2%.
+
+### 10. Optimize GROUP BY Order
+
+**Good:**
+```bash
+openchami-logq-query sql "
+  SELECT host, level, COUNT(*)
+  FROM SOURCES
+  GROUP BY host, level"  # host has higher cardinality
+```
+
+**Less optimal:**
+```bash
+openchami-logq-query sql "
+  SELECT level, host, COUNT(*)
+  FROM SOURCES
+  GROUP BY level, host"  # level has lower cardinality
+```
+
+**Why:** Grouping by high-cardinality columns first can improve query performance.
 
 ---
 
@@ -1157,100 +334,103 @@ openchami-logq-query sql --scope raw \
 ### Q: How do I query the last hour of logs?
 
 ```bash
-openchami-logq-query sql --scope raw \
-  "SELECT * FROM SOURCES
-   WHERE ts > NOW() - INTERVAL 1 HOUR"
+openchami-logq-query sql --scope raw "
+  SELECT * FROM SOURCES
+  WHERE ts > NOW() - INTERVAL 1 HOUR"
 ```
 
-Use `--scope raw` for recent data (not yet compacted).
+Use `--scope raw` for recent data that hasn't been compacted yet.
 
 ### Q: How do I count errors by host?
 
 ```bash
-openchami-logq-query sql \
-  "SELECT host, COUNT(*) as error_count
-   FROM SOURCES
-   WHERE level = 'ERROR'
-   GROUP BY host
-   ORDER BY error_count DESC"
+openchami-logq-query sql "
+  SELECT host, COUNT(*) as error_count
+  FROM SOURCES
+  WHERE level = 'ERROR'
+  GROUP BY host
+  ORDER BY error_count DESC"
 ```
 
 ### Q: How do I search for a specific message?
 
 ```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE msg LIKE '%timeout%'
-   LIMIT 100"
+openchami-logq-query sql "
+  SELECT * FROM SOURCES
+  WHERE msg LIKE '%timeout%'
+  LIMIT 100"
+```
+
+For case-insensitive search:
+```bash
+openchami-logq-query sql "
+  SELECT * FROM SOURCES
+  WHERE LOWER(msg) LIKE '%timeout%'
+  LIMIT 100"
 ```
 
 ### Q: How do I query both logs and events?
 
 ```bash
-openchami-logq-query sql --stream logs,events \
-  "SELECT * FROM SOURCES LIMIT 10"
+openchami-logq-query sql --stream logs,events "
+  SELECT * FROM SOURCES LIMIT 10"
 ```
 
 ### Q: How do I save results to a file?
 
 ```bash
-openchami-logq-query sql --output results.json \
-  "SELECT * FROM SOURCES WHERE level='ERROR'"
+# Using --output flag
+openchami-logq-query sql --output results.json "
+  SELECT * FROM SOURCES WHERE level='ERROR'"
+
+# Using shell redirection
+openchami-logq-query sql "
+  SELECT * FROM SOURCES WHERE level='ERROR'" > results.json
+
+# For large results, use NDJSON
+openchami-logq-query sql --format ndjson "
+  SELECT * FROM SOURCES WHERE level='ERROR'" > results.ndjson
 ```
 
-Or use shell redirection:
-```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES WHERE level='ERROR'" > results.json
-```
-
-### Q: How do I query a specific date?
+### Q: How do I query a specific date range?
 
 ```bash
-openchami-logq-query sql \
-  "SELECT * FROM SOURCES
-   WHERE ts >= '2026-06-10'
-   AND ts < '2026-06-11'"
+openchami-logq-query sql "
+  SELECT * FROM SOURCES
+  WHERE ts >= '2026-06-10' AND ts < '2026-06-11'"
 ```
 
 ### Q: How do I find unique values?
 
 ```bash
 # Unique hosts
-openchami-logq-query sql \
-  "SELECT DISTINCT host FROM SOURCES"
+openchami-logq-query sql "SELECT DISTINCT host FROM SOURCES"
 
 # Unique levels
-openchami-logq-query sql \
-  "SELECT DISTINCT level FROM SOURCES"
+openchami-logq-query sql "SELECT DISTINCT level FROM SOURCES"
+
+# Count of unique values
+openchami-logq-query sql "SELECT COUNT(DISTINCT host) FROM SOURCES"
 ```
 
 ### Q: How do I join logs with external data?
 
-You can't directly join with external data, but you can:
-
-1. Export logs to file
-2. Load into DuckDB
-3. Join with external data
+DuckDB can read external files directly in queries:
 
 ```bash
-# Export logs
-openchami-logq-query sql --format ndjson \
-  "SELECT * FROM SOURCES" > logs.ndjson
-
-# Use DuckDB CLI
-duckdb <<SQL
-CREATE TABLE logs AS
-  SELECT * FROM read_json('logs.ndjson');
-CREATE TABLE external AS
-  SELECT * FROM read_csv('external.csv');
-SELECT * FROM logs JOIN external ON logs.host = external.hostname;
-SQL
+openchami-logq-query sql "
+  SELECT
+    s.*,
+    h.location,
+    h.rack
+  FROM SOURCES s
+  JOIN read_csv('hosts.csv') h ON s.host = h.hostname
+  WHERE s.level = 'ERROR'"
 ```
 
 ### Q: How do I monitor query performance?
 
-Add timing:
+Add timing with the `time` command:
 
 ```bash
 time openchami-logq-query sql "SELECT COUNT(*) FROM SOURCES"
@@ -1265,56 +445,122 @@ user    0m0.123s
 sys     0m0.045s
 ```
 
-### Q: How do I query CloudEvents?
-
-```bash
-openchami-logq-query sql --stream events \
-  "SELECT type, source, COUNT(*)
-   FROM SOURCES
-   GROUP BY type, source"
-```
-
-### Q: How do I extract JSON fields?
-
-```bash
-openchami-logq-query sql \
-  "SELECT
-     json_extract_string(data, '$.user') as user,
-     COUNT(*) as count
-   FROM SOURCES
-   WHERE data IS NOT NULL
-   GROUP BY user"
-```
-
-### Q: Can I use DuckDB functions?
+### Q: Can I use all DuckDB functions?
 
 Yes! All DuckDB SQL functions are available:
 
 ```bash
 # Date functions
-openchami-logq-query sql \
-  "SELECT DATE_TRUNC('hour', ts) as hour, COUNT(*)
-   FROM SOURCES GROUP BY hour"
+openchami-logq-query sql "
+  SELECT DATE_TRUNC('hour', ts) as hour, COUNT(*)
+  FROM SOURCES GROUP BY hour"
 
 # String functions
-openchami-logq-query sql \
-  "SELECT UPPER(host), LOWER(level) FROM SOURCES"
+openchami-logq-query sql "
+  SELECT UPPER(host), LOWER(level) FROM SOURCES"
 
 # Math functions
-openchami-logq-query sql \
-  "SELECT ROUND(AVG(LENGTH(msg)), 2) FROM SOURCES"
+openchami-logq-query sql "
+  SELECT ROUND(AVG(LENGTH(msg)), 2) FROM SOURCES"
+
+# JSON functions
+openchami-logq-query sql "
+  SELECT json_extract_string(data, '$.key') FROM SOURCES"
 ```
 
-See [DuckDB Functions](https://duckdb.org/docs/sql/functions/overview) for complete list.
+See [DuckDB Functions](https://duckdb.org/docs/sql/functions/overview) for complete reference.
+
+### Q: How do I handle NULL values?
+
+```bash
+# Filter out NULLs
+openchami-logq-query sql "
+  SELECT * FROM SOURCES WHERE msg IS NOT NULL"
+
+# Replace NULLs with default
+openchami-logq-query sql "
+  SELECT COALESCE(msg, 'no message') as message FROM SOURCES"
+
+# Count NULLs
+openchami-logq-query sql "
+  SELECT
+    COUNT(*) as total,
+    COUNT(msg) as non_null_msg,
+    COUNT(*) - COUNT(msg) as null_msg
+  FROM SOURCES"
+```
+
+### Q: How do I debug slow queries?
+
+1. **Check how much data you're scanning:**
+```bash
+openchami-logq-query sql "
+  SELECT COUNT(*), MIN(ts), MAX(ts) FROM SOURCES"
+```
+
+2. **Add WHERE clause to limit time range:**
+```bash
+# Bad: scans all data
+openchami-logq-query sql "SELECT * FROM SOURCES WHERE level='ERROR'"
+
+# Good: scans only one day
+openchami-logq-query sql "
+  SELECT * FROM SOURCES
+  WHERE ts >= '2026-06-10' AND level='ERROR'"
+```
+
+3. **Select fewer columns:**
+```bash
+# Bad: reads all columns
+openchami-logq-query sql "SELECT * FROM SOURCES"
+
+# Good: reads only needed columns
+openchami-logq-query sql "SELECT ts, host, msg FROM SOURCES"
+```
+
+4. **Use EXPLAIN to see query plan:**
+```bash
+openchami-logq-query sql "
+  EXPLAIN SELECT * FROM SOURCES WHERE ts >= '2026-06-10'"
+```
+
+### Q: How do I query very large result sets?
+
+For result sets larger than available RAM:
+
+1. **Use NDJSON format** (streaming):
+```bash
+openchami-logq-query sql --format ndjson "
+  SELECT * FROM SOURCES" | jq -c 'select(.level=="ERROR")'
+```
+
+2. **Process in chunks** with LIMIT/OFFSET:
+```bash
+# Process 10,000 rows at a time
+for offset in 0 10000 20000 30000; do
+  openchami-logq-query sql "
+    SELECT * FROM SOURCES
+    LIMIT 10000 OFFSET $offset" >> results.ndjson
+done
+```
+
+3. **Use aggregate queries** to reduce data:
+```bash
+# Instead of downloading all rows, aggregate first
+openchami-logq-query sql "
+  SELECT host, level, COUNT(*), MIN(ts), MAX(ts)
+  FROM SOURCES
+  GROUP BY host, level"
+```
 
 ---
 
 ## Next Steps
 
-- **[Architecture Guide](ARCHITECTURE.md)** - Understand system design
-- **[Developer Guide](DEVELOPMENT.md)** - Contribute to the project
-- **[Operations Guide](OPERATIONS.md)** - Deploy and operate
-- **[API Reference](API_REFERENCE.md)** - Complete CLI reference
+- **[Main README](../README.md)** - Installation and basic usage
+- **[Architecture Guide](ARCHITECTURE.md)** - System design and technical details
+- **[Operations Guide](OPERATIONS.md)** - Production deployment and operations
+- **[Developer Guide](DEVELOPMENT.md)** - Contributing and development setup
 
 ---
 

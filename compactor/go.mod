@@ -4,7 +4,7 @@
 
 module github.com/OpenCHAMI/legendary-funicular/compactor
 
-go 1.25.5
+go 1.26.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.1

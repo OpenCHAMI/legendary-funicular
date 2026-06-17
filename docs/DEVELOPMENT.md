@@ -34,7 +34,7 @@ SPDX-License-Identifier: MIT
 Before you begin development, ensure you have:
 
 **Required:**
-- Go 1.23 or later
+- Go 1.26 or later
 - Git
 - Make
 
@@ -69,27 +69,9 @@ make lint
 
 ## Development Environment Setup
 
-### 1. Install Go
+### 1. Install Go 1.26 or greater
 
-**macOS:**
-```bash
-brew install go
-```
-
-**Linux:**
-```bash
-# Download from https://go.dev/dl/
-wget https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Verify:**
-```bash
-go version
-# Should output: go version go1.23.0 ...
-```
+See the main [go website](https://go.dev/) for installation details.
 
 ### 2. Install Development Tools
 
@@ -102,43 +84,6 @@ This installs:
 - reuse (license compliance)
 - pre-commit (git hooks)
 
-**Manual Installation:**
-
-**golangci-lint:**
-```bash
-# macOS
-brew install golangci-lint
-
-# Linux
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
-```
-
-**pre-commit:**
-```bash
-# Using pipx (recommended)
-pipx install pre-commit
-
-# Or using pip
-pip install pre-commit
-```
-
-**reuse:**
-```bash
-# Using pipx (recommended)
-pipx install reuse
-
-# Or using pip
-pip install reuse
-```
-
-**act (optional, for local CI):**
-```bash
-# macOS
-brew install act
-
-# Linux
-curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
-```
 
 ### 3. Install Pre-commit Hooks
 
@@ -169,84 +114,6 @@ reuse --version
 
 ## Project Structure
 
-### Repository Layout
-
-```
-legendary-funicular/
-├── .github/              # GitHub Actions workflows
-│   └── workflows/
-│       ├── Release.yaml         # Release automation
-│       ├── PRBuild.yaml         # PR validation
-│       ├── golangci-lint.yaml   # Linting CI
-│       ├── REUSE.yaml           # License compliance
-│       └── scorecard.yml        # Security scanning
-│
-├── query/                # Query CLI tool
-│   ├── cmd/             # CLI commands
-│   │   ├── sql/        # SQL query command
-│   │   ├── report/     # Report commands (list, describe, run)
-│   │   ├── inspect/    # Inspect commands (dates, schema, config)
-│   │   ├── dump/       # Dump command (debugging)
-│   │   ├── version/    # Version command
-│   │   ├── root.go     # Root command
-│   │   └── utils.go    # Shared utilities (BuildCfg, etc.)
-│   │
-│   ├── internal/        # Internal packages (not exported)
-│   │   ├── config/     # Configuration management
-│   │   ├── sql/        # DuckDB integration
-│   │   ├── render/     # Output formatting (JSON, NDJSON)
-│   │   ├── report/     # Report system
-│   │   ├── utils/      # Utilities (GetEnv, CheckFatal)
-│   │   └── version/    # Version information
-│   │
-│   ├── go.mod          # Go module definition
-│   ├── go.sum          # Go module checksums
-│   ├── main.go         # Entry point
-│   └── Dockerfile      # Container image
-│
-├── compactor/           # Compaction service
-│   ├── internal/
-│   │   ├── record/     # Log parsing
-│   │   │   ├── syslog/      # Syslog parser (RFC3164/RFC5424)
-│   │   │   └── cloudevent/  # CloudEvent parser (v1.0)
-│   │   ├── pipeline/   # Streaming pipeline utilities
-│   │   └── zio/        # Compression (zstd)
-│   │
-│   ├── go.mod          # Go module definition
-│   ├── go.sum          # Go module checksums
-│   ├── main.go         # Entry point
-│   ├── compaction.go   # Main compaction logic
-│   ├── util.go         # Utilities
-│   └── Dockerfile      # Container image
-│
-├── collector/           # Log collection (Vector/FluentBit configs)
-│   ├── vector.yaml
-│   └── fluent-bit.conf
-│
-├── deploy/              # Deployment configurations
-│   ├── systemd/        # Systemd service files
-│   ├── kubernetes/     # Kubernetes manifests
-│   └── docker-compose/ # Docker Compose files
-│
-├── docs/                # Documentation
-│   ├── ARCHITECTURE.md # System architecture
-│   ├── USER_GUIDE.md   # User guide
-│   ├── DEVELOPMENT.md  # This file
-│   ├── OPERATIONS.md   # Operations guide
-│   └── API_REFERENCE.md # API reference
-│
-├── LICENSES/            # License files
-│   └── MIT.txt
-│
-├── .goreleaser.yaml     # GoReleaser configuration
-├── .pre-commit-config.yaml # Pre-commit hooks
-├── Makefile             # Build automation
-├── README.md            # Project README
-├── REUSE.toml           # REUSE configuration
-├── CONTRIBUTING.md      # Contribution guidelines
-└── CHANGELOG.md         # Change log
-```
-
 ### Key Directories
 
 **`query/`** - Query CLI tool
@@ -276,11 +143,6 @@ legendary-funicular/
 ├── query/go.mod       # Query module
 └── compactor/go.mod   # Compactor module
 ```
-
-**Why two modules?**
-- Independent versioning
-- Separate dependencies
-- Cleaner builds
 
 ### Package Naming Conventions
 
@@ -372,6 +234,14 @@ make release-snapshot
 ---
 
 ## Testing
+
+### Test Coverage
+
+This project has comprehensive test coverage:
+- **240 test cases** covering all major components
+- **51 benchmarks** for performance validation
+- **2 fuzz tests** for parser robustness
+- **~50% code coverage** with 100% coverage on critical paths
 
 ### Run All Tests
 
@@ -465,8 +335,6 @@ go test ./...
 ```
 
 ### Testing Guidelines
-
-See [TESTING_QUICK_START.md](../TESTING_QUICK_START.md) for detailed testing guidelines.
 
 **Key principles:**
 1. Use table-driven tests
@@ -584,313 +452,18 @@ make act-reuse
 
 ---
 
-## Development Workflow
-
-### 1. Create a Branch
-
-```bash
-# Update main
-git checkout main
-git pull origin main
-
-# Create feature branch
-git checkout -b feature/my-feature
-```
-
-### 2. Make Changes
-
-Edit code, add tests, update documentation.
-
-### 3. Run Tests
-
-```bash
-# Run tests
-make test
-
-# Run linters
-make lint
-
-# Run all checks
-make all
-```
-
-### 4. Commit Changes
-
-```bash
-# Stage changes
-git add .
-
-# Commit (pre-commit hooks run automatically)
-git commit -m "Add feature X"
-```
-
-**Commit Message Format:**
-```
-<type>: <subject>
-
-<body>
-
-<footer>
-```
-
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation
-- `test`: Tests
-- `refactor`: Code refactoring
-- `chore`: Maintenance
-
-**Example:**
-```
-feat: Add JSON field extraction to SQL queries
-
-Adds support for json_extract_string() in SQL queries to extract
-fields from the data column.
-
-Closes #123
-```
-
-### 5. Push Changes
-
-```bash
-git push origin feature/my-feature
-```
-
-### 6. Create Pull Request
-
-1. Go to GitHub
-2. Click "New Pull Request"
-3. Select your branch
-4. Fill in description
-5. Submit
-
-### 7. Address Review Feedback
-
-```bash
-# Make changes
-git add .
-git commit -m "Address review feedback"
-git push origin feature/my-feature
-```
-
-### 8. Merge
-
-Once approved, maintainer will merge your PR.
-
----
 
 ## Contributing
 
 ### Contribution Guidelines
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed guidelines.
+See the [OpenCHAMI Contributing Guidelines](https://github.com/OpenCHAMI/.github/blob/main/CONTRIBUTING.md) for detailed guidelines.
 
-**Quick summary:**
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run linters
-6. Submit a pull request
 
-### Code Style
 
-**Follow Go conventions:**
-- Use `gofmt` (automatic via pre-commit)
-- Use `golangci-lint` (automatic via pre-commit)
-- Write godoc comments for exported functions
-- Keep functions small and focused
-- Use meaningful variable names
 
-**Example:**
-```go
-// BuildCfg builds a configuration from environment variables and CLI flags.
-// It returns an error if required configuration is missing.
-func BuildCfg() (*Config, error) {
-    endpoint := os.Getenv("S3_ENDPOINT")
-    if endpoint == "" {
-        return nil, fmt.Errorf("S3_ENDPOINT is required")
-    }
 
-    return &Config{
-        Endpoint: endpoint,
-        // ...
-    }, nil
-}
-```
-
-### Testing Requirements
-
-**All PRs must:**
-- Include tests for new code
-- Maintain or improve coverage
-- Pass all existing tests
-- Pass linters
-
-**Test coverage expectations:**
-- New features: 80%+ coverage
-- Bug fixes: Add test that reproduces bug
-- Refactoring: Maintain existing coverage
-
-### Documentation Requirements
-
-**Update documentation when:**
-- Adding new features
-- Changing CLI flags
-- Changing configuration
-- Changing behavior
-
-**Documentation to update:**
-- README.md (if user-facing)
-- docs/USER_GUIDE.md (for new commands/flags)
-- docs/API_REFERENCE.md (for API changes)
-- Code comments (godoc)
-
-### Review Process
-
-**PR checklist:**
-- [ ] Tests added/updated
-- [ ] Tests passing
-- [ ] Linters passing
-- [ ] Documentation updated
-- [ ] Commit messages clear
-- [ ] No merge conflicts
-
-**Review criteria:**
-- Code quality
-- Test coverage
-- Documentation
-- Performance impact
-- Security implications
-
----
-
-## Debugging
-
-### Debug with Delve
-
-```bash
-# Install delve
-go install github.com/go-delve/delve/cmd/dlv@latest
-
-# Debug query
-cd query
-dlv debug . -- sql "SELECT * FROM SOURCES LIMIT 10"
-
-# Debug compactor
-cd compactor
-dlv debug .
-```
-
-### Debug with Print Statements
-
-```go
-import "log/slog"
-
-slog.Debug("Debug message", "key", value)
-slog.Info("Info message", "key", value)
-slog.Warn("Warning message", "key", value)
-slog.Error("Error message", "key", value)
-```
-
-### Debug with Environment Variables
-
-```bash
-# Enable DuckDB logging
-export DUCKDB_LOG_LEVEL=DEBUG
-
-# Enable S3 debug logging
-export AWS_SDK_LOAD_CONFIG=1
-export AWS_LOG_LEVEL=debug
-
-# Run with debug logging
-cd query
-go run . sql "SELECT * FROM SOURCES LIMIT 10"
-```
-
-### Debug S3 Access
-
-```bash
-# Test S3 access with AWS CLI
-aws s3 ls s3://openchami-logs-daily \
-  --endpoint-url=$S3_ENDPOINT
-
-# Test with curl
-curl -v $S3_ENDPOINT
-```
-
-### Debug DuckDB Queries
-
-```bash
-# Use DuckDB CLI directly
-duckdb <<SQL
-CREATE SECRET local_s3 (
-  TYPE s3,
-  PROVIDER config,
-  KEY_ID '$S3_ACCESS_KEY',
-  SECRET '$S3_SECRET_KEY',
-  REGION '$S3_REGION',
-  ENDPOINT '$S3_ENDPOINT',
-  USE_SSL false
-);
-
-SELECT * FROM read_parquet('s3://bucket/logs/*.parquet') LIMIT 10;
-SQL
-```
-
-### Profiling
-
-**CPU Profiling:**
-```bash
-cd query
-go test -cpuprofile=cpu.prof -bench=. ./...
-go tool pprof cpu.prof
-```
-
-**Memory Profiling:**
-```bash
-cd query
-go test -memprofile=mem.prof -bench=. ./...
-go tool pprof mem.prof
-```
-
-**Trace:**
-```bash
-cd query
-go test -trace=trace.out -bench=. ./...
-go tool trace trace.out
-```
-
-### Common Issues
-
-**Issue: Tests fail with "S3 access denied"**
-
-Solution: Set test environment variables:
-```bash
-export S3_ENDPOINT="http://localhost:7070"
-export S3_ACCESS_KEY="test-key"
-export S3_SECRET_KEY="test-secret"
-```
-
-**Issue: Linter fails with "module not found"**
-
-Solution: Run go mod tidy:
-```bash
-cd query && go mod tidy
-cd compactor && go mod tidy
-```
-
-**Issue: Pre-commit hooks fail**
-
-Solution: Run hooks manually to see error:
-```bash
-pre-commit run --all-files
-```
-
----
-
-## Release Process
+### Releases
 
 ### Versioning
 
@@ -968,8 +541,8 @@ Each release includes:
 - **[Architecture](ARCHITECTURE.md)** - System design
 - **[User Guide](USER_GUIDE.md)** - Usage instructions
 - **[Operations Guide](OPERATIONS.md)** - Deployment and operations
-- **[API Reference](API_REFERENCE.md)** - CLI reference
 - **[Testing Guide](../TESTING_QUICK_START.md)** - Testing methodology
+- **[Changelog](../CHANGELOG.md)** - Version history
 
 ### External Resources
 

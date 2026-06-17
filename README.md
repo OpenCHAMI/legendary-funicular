@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 
 # openchami-logq
 
-[![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.26+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![REUSE status](https://api.reuse.software/badge/github.com/OpenCHAMI/legendary-funicular)](https://api.reuse.software/info/github.com/OpenCHAMI/legendary-funicular)
 
@@ -34,92 +34,41 @@ Store all your HPC cluster logs and events cheaply in S3-compatible storage, the
 
 ## Quick Start
 
-### Prerequisites
-
-- Go 1.23+ (for building from source)
-- S3-compatible storage (VersityGW, MinIO, or AWS S3)
-- Optional: Docker for containerized deployment
-
 ### Installation
 
-**Option 1: Install Script (Recommended)**
+**Recommended:** Use the install script
 ```bash
 curl -sSL https://raw.githubusercontent.com/OpenCHAMI/legendary-funicular/main/installer.bash | bash
 ```
 
-**Option 2: Build from Source**
+**Other options:** See [Installation Options](#installation-options) below for Docker, building from source, or RPM packages.
+
+### Configuration
+
+Set your S3 connection details:
 ```bash
-git clone https://github.com/OpenCHAMI/legendary-funicular.git
-cd legendary-funicular
-make build
-sudo cp bin/openchami-logq-* /usr/local/bin/
-```
-
-**Option 3: Docker**
-```bash
-docker pull ghcr.io/openchami/logq-query:latest
-docker pull ghcr.io/openchami/logq-compactor:latest
-```
-
-**Option 4: RPM Package** (Coming Soon)
-```bash
-# RPM packaging in progress
-```
-
-### Quick Configuration
-
-Create environment file `~/.openchami-logq.env`:
-
-```bash
-# S3 Configuration
 export S3_ENDPOINT="http://localhost:7070"
-export S3_REGION="us-east-1"
 export S3_ACCESS_KEY="your-access-key"
 export S3_SECRET_KEY="your-secret-key"
-export S3_BUCKET_RAW="openchami-logs-raw"
-export S3_BUCKET_COMPACTED="openchami-logs-daily"
-export S3_SSL="false"  # true for HTTPS
 ```
 
-Source the environment:
-```bash
-source ~/.openchami-logq.env
-```
+For all configuration options, see [Configuration](#configuration) below or run `openchami-logq-query --help`.
 
 ### Your First Query
 
-**Query recent errors:**
 ```bash
-openchami-logq-query sql \
-  --scope compacted \
-  --stream logs \
-  "SELECT ts, host, level, msg
-   FROM SOURCES
-   WHERE level = 'ERROR'
-   ORDER BY ts DESC
-   LIMIT 10"
-```
+# Query error logs
+openchami-logq-query sql "SELECT level, COUNT(*) FROM SOURCES GROUP BY level"
 
-**Use a built-in report:**
-```bash
-# List available reports
+# Use a built-in report
 openchami-logq-query report list
-
-# Run a report
 openchami-logq-query report run find-all-service-errors
-```
 
-**Inspect your data:**
-```bash
-# See available dates
+# Inspect your data
 openchami-logq-query inspect dates --stream logs
-
-# View schema
-openchami-logq-query inspect schema --stream logs
-
-# Check configuration
-openchami-logq-query inspect config
 ```
+
+That's it! See [Usage Examples](#usage-examples) for more.
 
 ## Architecture
 
@@ -185,18 +134,6 @@ openchami-logq-query inspect config
 # Both work! Fields extracted where possible.
 ```
 
-### Cost Optimization
-
-**Storage Costs:**
-- Raw NDJSON: ~$0.023/GB/month (S3 Standard)
-- Compacted Parquet: ~$0.004/GB/month (10x compression + S3 IA)
-- **Example:** 1TB logs/month = ~$50/month (vs $1000+ for traditional)
-
-**Query Costs:**
-- DuckDB queries Parquet directly from S3
-- Only pay for data scanned (not stored)
-- **Example:** Query 1GB = ~$0.0004 (vs $5+ for indexed search)
-
 ### Built-in Reports
 
 Pre-built queries for common tasks:
@@ -231,90 +168,71 @@ WHERE trace_id = 'abc123'
 ORDER BY ts ASC
 ```
 
+## Installation Options
+
+### Install Script (Recommended)
+```bash
+curl -sSL https://raw.githubusercontent.com/OpenCHAMI/legendary-funicular/main/installer.bash | bash
+```
+
+### Docker
+```bash
+docker pull ghcr.io/openchami/logq-query:latest
+docker pull ghcr.io/openchami/logq-compactor:latest
+```
+
+### Build from Source
+```bash
+git clone https://github.com/OpenCHAMI/legendary-funicular.git
+cd legendary-funicular
+make build
+sudo cp bin/openchami-logq-* /usr/local/bin/
+```
+
+**Prerequisites:** Go 1.26+, S3-compatible storage (VersityGW, MinIO, or AWS S3)
+
+### RPM Package (Coming Soon)
+```bash
+# RPM packaging in progress
+```
+
+For development setup and testing, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 ## Usage Examples
 
-### Basic Queries
-
-**Count logs by level:**
+**Query logs by level:**
 ```bash
-openchami-logq-query sql \
-  "SELECT level, COUNT(*) as count
-   FROM SOURCES
-   GROUP BY level
-   ORDER BY count DESC"
+openchami-logq-query sql "SELECT level, COUNT(*) FROM SOURCES GROUP BY level ORDER BY COUNT(*) DESC"
 ```
 
 **Find logs from specific host:**
 ```bash
-openchami-logq-query sql \
-  --stream logs \
-  "SELECT * FROM SOURCES
-   WHERE host = 'node01'
-   AND ts > '2026-06-10'"
+openchami-logq-query sql --stream logs "SELECT * FROM SOURCES WHERE host = 'node01' AND ts > '2026-06-10'"
 ```
 
 **Query CloudEvents:**
 ```bash
-openchami-logq-query sql \
-  --stream events \
-  "SELECT type, source, COUNT(*) as count
-   FROM SOURCES
-   GROUP BY type, source"
+openchami-logq-query sql --stream events "SELECT type, source, COUNT(*) FROM SOURCES GROUP BY type, source"
 ```
-
-### Advanced Queries
 
 **Time-range analysis:**
 ```bash
-openchami-logq-query sql \
-  "SELECT
-     DATE_TRUNC('hour', ts) as hour,
-     level,
-     COUNT(*) as count
-   FROM SOURCES
-   WHERE ts BETWEEN '2026-06-10' AND '2026-06-11'
-   GROUP BY hour, level
-   ORDER BY hour, level"
+openchami-logq-query sql "SELECT DATE_TRUNC('hour', ts) as hour, level, COUNT(*) as count FROM SOURCES WHERE ts BETWEEN '2026-06-10' AND '2026-06-11' GROUP BY hour, level"
 ```
 
-**JSON field extraction:**
+**Output formats:**
 ```bash
-openchami-logq-query sql \
-  "SELECT
-     json_extract_string(data, '$.user') as user,
-     COUNT(*) as count
-   FROM SOURCES
-   WHERE level = 'ERROR'
-   GROUP BY user"
-```
+# JSON (default)
+openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 5"
 
-**Cross-stream query:**
-```bash
-# Query both logs and events
-openchami-logq-query sql \
-  --stream logs,events \
-  "SELECT type, COUNT(*) FROM SOURCES GROUP BY type"
-```
+# NDJSON for streaming
+openchami-logq-query sql --format ndjson "SELECT * FROM SOURCES LIMIT 5"
 
-### Output Formats
-
-**JSON (default):**
-```bash
-openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 2"
-# Output: [{"ts":"...","host":"..."},{"ts":"...","host":"..."}]
-```
-
-**NDJSON (streaming):**
-```bash
-openchami-logq-query sql --format ndjson "SELECT * FROM SOURCES LIMIT 2"
-# Output: {"ts":"...","host":"..."}
-#         {"ts":"...","host":"..."}
-```
-
-**Pipe to jq:**
-```bash
+# Pipe to jq
 openchami-logq-query sql "SELECT * FROM SOURCES LIMIT 10" | jq '.[] | select(.level=="ERROR")'
 ```
+
+**For more advanced examples** including JSON field extraction, window functions, and DuckDB-specific optimizations, see [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Compaction
 
@@ -346,143 +264,39 @@ openchami-logq-compactor --dry-run
 
 ## Configuration
 
-### Environment Variables
+openchami-logq is configured via environment variables or CLI flags. CLI flags override environment variables.
 
-**S3 Configuration:**
-```bash
-S3_ENDPOINT       # S3 endpoint URL (required)
-S3_REGION         # S3 region (default: us-east-1)
-S3_ACCESS_KEY     # S3 access key (required)
-S3_SECRET_KEY     # S3 secret key (required)
-S3_BUCKET_RAW     # Raw NDJSON bucket (default: openchami-logs-raw)
-S3_BUCKET_COMPACTED # Compacted Parquet bucket (default: openchami-logs-daily)
-S3_SSL            # Use SSL/TLS (default: true)
-```
+### S3 Connection
 
-**Query Configuration:**
-```bash
-LOGQ_FORMAT       # Output format: json|ndjson (default: json)
-LOGQ_SCOPE        # Data scope: raw|compacted (default: compacted)
-LOGQ_STREAM       # Log stream: logs|events (default: logs)
-```
+The tools need to connect to S3-compatible storage:
+- **Endpoint:** URL of your S3 service (required)
+- **Credentials:** Access key and secret key for authentication (required)
+- **Buckets:** Separate buckets for raw logs and compacted data (defaults: `openchami-logs-raw`, `openchami-logs-daily`)
+- **Region:** S3 region (default: `us-east-1`)
+- **SSL:** Enable/disable HTTPS (default: `true`)
 
-**Compactor Configuration:**
-```bash
-COMPACTOR_DATE    # Date to compact (default: yesterday)
-COMPACTOR_DRY_RUN # Dry run mode (default: false)
-```
+### Query Options
 
-### CLI Flags
+Control query behavior:
+- **Format:** Output format - `json` for complete results or `ndjson` for streaming (default: `json`)
+- **Scope:** Data source - `raw` (NDJSON), `compacted` (Parquet), or `all` (default: `compacted`)
+- **Stream:** Log type - `logs` or `events` (default: `logs`)
 
-All environment variables can be overridden with CLI flags:
+### Example Configuration
 
 ```bash
-openchami-logq-query sql \
-  --endpoint "http://localhost:7070" \
-  --access-key "..." \
-  --secret-key "..." \
-  --scope compacted \
-  --stream logs \
-  --format ndjson \
-  "SELECT * FROM SOURCES LIMIT 10"
+# Minimal setup
+export S3_ENDPOINT="http://localhost:7070"
+export S3_ACCESS_KEY="your-access-key"
+export S3_SECRET_KEY="your-secret-key"
+
+# Optional overrides
+export S3_BUCKET_RAW="my-raw-logs"
+export S3_BUCKET_COMPACTED="my-compacted-logs"
+export S3_SSL="false"  # for local development
 ```
 
-See `openchami-logq-query --help` for all options.
-
-## Development
-
-### Prerequisites
-
-- Go 1.23+
-- golangci-lint
-- pre-commit (optional)
-- Docker (optional)
-
-### Setup Development Environment
-
-```bash
-# Clone repository
-git clone https://github.com/OpenCHAMI/legendary-funicular.git
-cd legendary-funicular
-
-# Install development tools
-make setup-dev
-
-# Build binaries
-make build
-
-# Run tests
-make test
-
-# Run linters
-make lint
-```
-
-### Project Structure
-
-```
-legendary-funicular/
-├── query/              # Query CLI tool
-│   ├── cmd/           # CLI commands
-│   │   ├── sql/       # SQL query command
-│   │   ├── report/    # Report commands
-│   │   ├── inspect/   # Inspect commands
-│   │   └── version/   # Version command
-│   └── internal/      # Internal packages
-│       ├── config/    # Configuration
-│       ├── sql/       # DuckDB integration
-│       ├── render/    # Output formatting
-│       └── report/    # Report system
-├── compactor/         # Compaction service
-│   ├── internal/
-│   │   ├── record/    # Log parsing (syslog, cloudevent)
-│   │   ├── pipeline/  # Streaming pipeline
-│   │   └── zio/       # Compression (zstd)
-│   └── main.go
-├── collector/         # Log collection (Vector config)
-├── deploy/            # Deployment configs
-├── .github/           # CI/CD workflows
-└── docs/              # Documentation
-```
-
-### Testing
-
-```bash
-# Run all tests
-make test
-
-# Run specific tests
-make test-query
-make test-compactor
-
-# Run tests with coverage
-make test-coverage
-
-# Run tests with race detector
-go test -race ./...
-
-# Run benchmarks
-go test -bench=. ./...
-```
-
-### Code Quality
-
-```bash
-# Format code
-make fmt
-
-# Run linters
-make lint
-
-# Fix linter issues
-make lint-fix
-
-# Check for vulnerabilities
-make vuln
-
-# REUSE compliance
-make reuse
-```
+**All options:** Run `openchami-logq-query --help` for complete reference.
 
 ## Deployment
 
@@ -529,35 +343,50 @@ services:
     command: version
 ```
 
-### Kubernetes
+For detailed operational procedures, monitoring, and production deployment, see [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-See [deploy/kubernetes/](deploy/kubernetes/) for Kubernetes manifests.
+## Development & Testing
+
+This project has comprehensive test coverage including unit tests, benchmarks, and fuzz tests.
+For development setup, testing guidelines, and contribution workflow, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+Quick start for contributors:
+```bash
+git clone https://github.com/OpenCHAMI/legendary-funicular.git
+cd legendary-funicular
+make setup-dev  # Install development tools
+make build      # Build binaries
+make test       # Run test suite
+make lint       # Run linters
+```
 
 ## Documentation
 
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
-- **[User Guide](docs/USER_GUIDE.md)** - Detailed usage instructions
-- **[Developer Guide](docs/DEVELOPMENT.md)** - Development setup and guidelines
-- **[Operations Guide](docs/OPERATIONS.md)** - Deployment and operations
-- **[API Reference](docs/API_REFERENCE.md)** - Configuration and CLI reference
-- **[Testing Guide](TESTING_QUICK_START.md)** - Testing methodology
+- **[User Guide](docs/USER_GUIDE.md)** - Advanced usage, SQL examples, and DuckDB tips
+- **[Operations Guide](docs/OPERATIONS.md)** - Production deployment and operational procedures
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and technical deep dive
+- **[Developer Guide](docs/DEVELOPMENT.md)** - Development setup and testing guidelines
+- **[Changelog](CHANGELOG.md)** - Version history and breaking changes
 
 ## Performance
 
+Performance varies based on hardware, data size, query complexity, and S3 network latency.
+
 **Query Performance:**
-- Simple queries: <100ms
-- Complex aggregations: <1s
-- Full table scans: <5s (1GB data)
+- DuckDB's columnar engine enables fast aggregations on compressed Parquet files
+- Columnar filtering scans only required columns, reducing I/O
+- Query time depends on data scanned, predicate selectivity, and network bandwidth
+- Typical queries on modest hardware: simple aggregations complete in seconds
 
 **Compaction Performance:**
-- ~10MB/s throughput
-- ~10:1 compression ratio
-- ~1 hour for 1TB of logs
+- Throughput depends on CPU cores, network bandwidth to S3, and compression settings
+- Streaming architecture processes data incrementally without loading full files
+- Typical compression ratios: 5:1 to 15:1 depending on log structure and field cardinality
 
 **Storage Efficiency:**
-- Raw NDJSON: 1.0x
-- Compressed NDJSON (zstd): 0.3x
-- Parquet: 0.1x (10x compression)
+- Raw NDJSON: baseline (1.0x)
+- Compressed NDJSON (zstd): ~70% reduction (0.3x)
+- Parquet (columnar + compression): ~85-95% reduction (0.05x-0.15x)
 
 ## Troubleshooting
 
@@ -588,38 +417,21 @@ openchami-logq-query inspect dates --stream logs
 aws s3 ls s3://openchami-logs-daily/logs/ --endpoint-url=$S3_ENDPOINT
 ```
 
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more.
+For additional troubleshooting, check the project's GitHub issues or open a new issue with details about your environment and error messages.
 
 ## Contributing
 
-We welcome contributions! Please see:
+We welcome contributions! See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for development setup and testing guidelines.
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** - Community guidelines
-- **[Development Guide](docs/DEVELOPMENT.md)** - Development setup
+For organization-wide guidelines, see:
+- [OpenCHAMI Contributing Guidelines](https://github.com/OpenCHAMI/.github/blob/main/CONTRIBUTING.md)
+- [OpenCHAMI Code of Conduct](https://github.com/OpenCHAMI/.github/blob/main/CODE_OF_CONDUCT.md)
 
-### Quick Contribution Guide
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`make test`)
-5. Run linters (`make lint`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
-## Testing
-
-This project has comprehensive test coverage:
-
-- **240 test cases** covering all major components
-- **51 benchmarks** for performance validation
-- **2 fuzz tests** for parser robustness
-- **~50% code coverage** (100% on critical paths)
-- **2 bugs found and fixed** during testing
-
-See [TESTING_QUICK_START.md](TESTING_QUICK_START.md) for testing guidelines.
+**Quick start:**
+1. Fork the repository and create a feature branch
+2. Make your changes and add tests
+3. Run `make test` and `make lint`
+4. Submit a pull request
 
 ## Roadmap
 
