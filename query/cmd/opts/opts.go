@@ -58,10 +58,13 @@ func (o *Opts) validate() error {
 	return nil
 }
 
-func (o *Opts) BuildSources(cfg *config.Config) []string {
+func (o *Opts) BuildSources(cfg *config.Config) ([]string, error) {
 	if err := o.validate(); err != nil {
-		// todo: redo this properly
-		utils.CheckFatal(err)
+		return nil, err
+	}
+
+	if cfg == nil || cfg.S3BucketParquet == nil || cfg.S3BucketNDJSON == nil {
+		return nil, errors.New("config and S3 bucket names are required")
 	}
 
 	var sources []string
@@ -84,11 +87,10 @@ func (o *Opts) BuildSources(cfg *config.Config) []string {
 	}
 
 	if len(sources) == 0 {
-		// todo: redo this properly
-		utils.CheckFatal(errors.New(
+		return nil, errors.New(
 			"change guard rail failure, query does not map to known data scopes/streams",
-		))
+		)
 	}
 
-	return sources
+	return sources, nil
 }

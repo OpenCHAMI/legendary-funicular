@@ -15,19 +15,19 @@ func BuildCfg() *config.Config {
 	opts = append(opts, config.WithS3KeyAccess(utils.GetEnvFatal("S3_ACCESS_KEY")))
 	opts = append(opts, config.WithS3KeySecret(utils.GetEnvFatal("S3_SECRET_KEY")))
 
-	if value, err := utils.GetEnv("S3_REGION"); err != nil && value != "" {
+	if value, err := utils.GetEnv("S3_REGION"); err == nil && value != "" {
 		opts = append(opts, config.WithS3Region(value))
 	}
-	if value, err := utils.GetEnv("S3_ENDPOINT"); err != nil && value != "" {
+	if value, err := utils.GetEnv("S3_ENDPOINT"); err == nil && value != "" {
 		opts = append(opts, config.WithS3Endpoint(value))
 	}
-	if value, err := utils.GetEnv("S3_SSL"); err != nil && value != "" {
+	if value, err := utils.GetEnv("S3_SSL"); err == nil && value != "" {
 		opts = append(opts, config.WithS3SSL(value == "true"))
 	}
-	if value, err := utils.GetEnv("S3_BUCKET_NDJSON"); err != nil && value != "" {
+	if value, err := utils.GetEnv("S3_BUCKET_NDJSON"); err == nil && value != "" {
 		opts = append(opts, config.WithS3BucketNDJSON(value))
 	}
-	if value, err := utils.GetEnv("S3_BUCKET_PARQUET"); err != nil && value != "" {
+	if value, err := utils.GetEnv("S3_BUCKET_PARQUET"); err == nil && value != "" {
 		opts = append(opts, config.WithS3BucketParquet(value))
 	}
 

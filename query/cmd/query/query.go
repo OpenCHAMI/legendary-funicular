@@ -8,6 +8,7 @@ package query
 import (
 	"context"
 	dbsql "database/sql"
+	"fmt"
 
 	"github.com/OpenCHAMI/legendary-funicular/query/cmd/opts"
 	"github.com/OpenCHAMI/legendary-funicular/query/internal/config"
@@ -21,7 +22,13 @@ func ExecUnstructured(
 	cfg *config.Config,
 	options opts.Opts,
 ) error {
-	sources := options.BuildSources(cfg)
+	if cfg == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
+	sources, err := options.BuildSources(cfg)
+	if err != nil {
+		return err
+	}
 	engine, err := sql.New(cfg, ctx)
 	if err != nil {
 		return err
@@ -66,8 +73,14 @@ func ExecStructured[T any](
 	options opts.Opts,
 	scanner SQLRowScanner[T],
 ) error {
+	if cfg == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
 
-	sources := options.BuildSources(cfg)
+	sources, err := options.BuildSources(cfg)
+	if err != nil {
+		return err
+	}
 	engine, err := sql.New(cfg, ctx)
 	if err != nil {
 		return err

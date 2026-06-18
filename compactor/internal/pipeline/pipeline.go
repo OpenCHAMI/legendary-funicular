@@ -21,11 +21,11 @@ func NewR(i io.ReadCloser, transforms ...TransformR) (*PipelineReadCloser, error
 	for ix, transform := range transforms {
 		prev := pipe.stages[ix]
 		next, err := transform(prev)
-		pipe.stages = append(pipe.stages, next)
 		if err != nil {
 			pipe.Close()
 			return nil, err
 		}
+		pipe.stages = append(pipe.stages, next)
 	}
 	return &pipe, nil
 }
