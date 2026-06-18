@@ -84,7 +84,6 @@ This installs:
 - reuse (license compliance)
 - pre-commit (git hooks)
 
-
 ### 3. Install Pre-commit Hooks
 
 ```bash
@@ -109,7 +108,6 @@ pre-commit --version
 # Check reuse
 reuse --version
 ```
-
 ---
 
 ## Project Structure
@@ -127,12 +125,8 @@ reuse --version
 - Streaming pipeline (constant memory)
 
 **`collector/`** - Log collection configs
-- Vector and FluentBit configurations
+- Rsyslog and Vector configurations
 - Not Go code (just configs)
-
-**`internal/`** - Internal packages
-- Not exported (Go convention)
-- Implementation details
 
 ### Module Structure
 
@@ -234,14 +228,6 @@ make release-snapshot
 ---
 
 ## Testing
-
-### Test Coverage
-
-This project has comprehensive test coverage:
-- **240 test cases** covering all major components
-- **51 benchmarks** for performance validation
-- **2 fuzz tests** for parser robustness
-- **~50% code coverage** with 100% coverage on critical paths
 
 ### Run All Tests
 
@@ -452,18 +438,13 @@ make act-reuse
 
 ---
 
-
 ## Contributing
 
 ### Contribution Guidelines
 
 See the [OpenCHAMI Contributing Guidelines](https://github.com/OpenCHAMI/.github/blob/main/CONTRIBUTING.md) for detailed guidelines.
 
-
-
-
-
-### Releases
+## Releases
 
 ### Versioning
 
@@ -475,29 +456,15 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Release Checklist
 
-1. **Update CHANGELOG.md**
-   ```markdown
-   ## [1.0.0] - 2026-06-10
+1. **Update version in code** (if applicable)
 
-   ### Added
-   - New feature X
-
-   ### Changed
-   - Changed behavior Y
-
-   ### Fixed
-   - Fixed bug Z
-   ```
-
-2. **Update version in code** (if applicable)
-
-3. **Create and push tag**
+2. **Create and push tag**
    ```bash
    git tag -a v1.0.0 -m "Release v1.0.0"
    git push origin v1.0.0
    ```
 
-4. **GitHub Actions automatically:**
+3. **GitHub Actions automatically:**
    - Runs tests
    - Runs linters
    - Builds binaries (multi-arch)
@@ -507,7 +474,7 @@ We follow [Semantic Versioning](https://semver.org/):
    - Generates SBOM
    - Signs artifacts
 
-5. **Verify release**
+4. **Verify release**
    - Check GitHub Releases page
    - Test binaries
    - Test Docker images
@@ -540,9 +507,6 @@ Each release includes:
 
 - **[Architecture](ARCHITECTURE.md)** - System design
 - **[User Guide](USER_GUIDE.md)** - Usage instructions
-- **[Operations Guide](OPERATIONS.md)** - Deployment and operations
-- **[Testing Guide](../TESTING_QUICK_START.md)** - Testing methodology
-- **[Changelog](../CHANGELOG.md)** - Version history
 
 ### External Resources
 
@@ -570,7 +534,3 @@ Each release includes:
 
 **Security Issues?**
 - Email security@openchami.org (do not open public issue)
-
----
-
-**Happy coding! 🚀**

@@ -41,20 +41,12 @@ openchami-logq is a lightweight log lake system for HPC environments providing:
 
 ```mermaid
 graph TD
-    A[Log Sources] -->|syslog/events| B[Collector<br/>Vector/FluentBit]
+    A[Log Sources] -->|syslog/events| B[Collector<br/>Vector]
     B -->|NDJSON| C[S3 Raw Bucket<br/>openchami-logs-raw]
     C -->|daily| D[Compactor<br/>openchami-logq-compactor]
     D -->|Parquet| E[S3 Compacted Bucket<br/>openchami-logs-daily]
     E -->|SQL queries| F[Query CLI<br/>openchami-logq-query]
     F -->|JSON/NDJSON| G[User]
-
-    style A fill:#e1f5ff
-    style B fill:#fff4e1
-    style C fill:#ffe1e1
-    style D fill:#fff4e1
-    style E fill:#e1ffe1
-    style F fill:#fff4e1
-    style G fill:#e1f5ff
 ```
 
 ---
@@ -67,7 +59,7 @@ graph TD
 
 **Rationale:**
 - Logs are immutable evidence
-- Storage is cheap (~$0.02/GB/month)
+- Storage is cheap
 - Deletion risks losing critical data
 
 **Implementation:**
@@ -99,7 +91,7 @@ graph TD
 - Easier to maintain and debug
 
 **Implementation:**
-- Collector: Vector/FluentBit (external dependency)
+- Collector: Vector (external dependency)
 - Storage: S3-compatible (external dependency)
 - Compactor: Go binary, runs on schedule
 - Query: Go CLI, runs on-demand
@@ -122,7 +114,7 @@ graph TD
 
 ## Component Architecture
 
-### Collector (Vector/FluentBit)
+### Collector (Vector)
 
 **Responsibility:** Accept logs and write to S3 raw bucket.
 
@@ -133,24 +125,16 @@ graph TD
 - Batches writes (5-10MB or 5 minutes)
 
 **Configuration:**
-```yaml
-# See collector/vector.yaml for full example
-sinks:
-  s3:
-    type: aws_s3
-    bucket: openchami-logs-raw
-    key_prefix: logs/
-    encoding:
-      codec: ndjson
-```
+
+Check out the [default configuration](collector/vector.d/)
 
 ### Compactor
 
 **Responsibility:** Convert raw NDJSON to optimized Parquet.
 
 **Key Characteristics:**
-- Go binary (~10MB)
-- Runs daily via cron/timer
+- Go binary
+- Runs daily (default configuration uses a Systemd timer)
 - Stateless (no local database)
 - Streaming architecture (constant memory)
 
@@ -164,19 +148,19 @@ graph LR
     D -->|upload| E[S3 Compacted]
     E -->|success| F[Delete Raw]
 
-    style A fill:#ffe1e1
-    style E fill:#e1ffe1
+    style A fill:#770077
+    style E fill:#007777
 ```
 
 **Parsing Strategy:**
-- Detect format (syslog vs cloudevent) from first field
+- Select format based on the S3 bucket prefix (logs vs. events)
 - Extract common fields: `ts`, `host`, `level`, `msg`
 - Store unknown fields in `data` JSON column
 - Never fail on parse errors (store as-is)
 
 ### Query Engine
 
-**Responsibility:** Execute SQL queries against Parquet files.
+**Responsibility:** Execute SQL queries against Parquet and compressed raw NDJSON files.
 
 **Key Characteristics:**
 - Go binary with embedded DuckDB
@@ -201,10 +185,10 @@ graph LR
 **Query Pattern:**
 ```sql
 -- SOURCES is replaced with actual S3 paths
-SELECT * FROM SOURCES WHERE ts > '2026-06-10'
+SELECT * FROM SOURCES WHERE ts::TIMESTAMP > '2026-06-10'
 
 -- Becomes:
-SELECT * FROM read_parquet('s3://bucket/logs/2026-06-10/*.parquet')
+SELECT * FROM read_parquet('s3://<bucket-name>/logs/**/*.parquet')
 ```
 
 ---
@@ -222,10 +206,10 @@ sequenceDiagram
     App->>Collector: Send log (syslog/event)
     Collector->>Collector: Buffer (5min or 10MB)
     Collector->>S3: Write NDJSON
-    Note over S3: logs/2026-06-10/12-30.ndjson
+    Note over S3: logs/../1781821498-ab1730b7-cfcb-491b-8b30-acff12603e3c.ndjson.zst
 ```
 
-**Path Pattern:** `logs/YYYY-MM-DD/HH-MM.ndjson`
+**Path Pattern:** `logs/date=YYYY-MM-DD/hour=HH/<UUID>.ndjson.zst`
 
 **File Size:** Typically 5-10MB (5 minutes of logs)
 
@@ -239,17 +223,17 @@ sequenceDiagram
     participant Compacted as S3 Compacted
 
     Cron->>Compactor: Run daily at 2 AM
-    Compactor->>Raw: List logs/YYYY-MM-DD/*.ndjson
+    Compactor->>Raw: List logs/**/*.ndjson.zst
     Raw-->>Compactor: File list
     loop For each file
-        Compactor->>Raw: Stream NDJSON
+        Raw->>Compactor: Stream NDJSON
         Compactor->>Compactor: Parse & convert to Parquet
-        Compactor->>Compacted: Upload Parquet
     end
+    Compactor->>Compacted: Upload Parquet
     Compactor->>Raw: Delete processed files
 ```
 
-**Path Pattern:** `logs/YYYY-MM-DD.parquet`
+**Path Pattern:** `logs/date=YYYY-MM-DD/<UUID>.parquet`
 
 **Compression:** Typically 10:1 (100MB NDJSON → 10MB Parquet)
 
@@ -260,7 +244,7 @@ sequenceDiagram
     participant User
     participant CLI as openchami-logq-query
     participant DuckDB
-    participant S3 as S3 Compacted
+    participant S3 as S3 Compacted + Raw
 
     User->>CLI: SQL query
     CLI->>CLI: Replace SOURCES with S3 paths
@@ -281,60 +265,84 @@ sequenceDiagram
 
 ```
 openchami-logs-raw/
-├── logs/
-│   ├── 2026-06-10/
-│   │   ├── 00-00.ndjson
-│   │   ├── 00-05.ndjson
-│   │   └── ...
-│   └── 2026-06-11/
-│       └── ...
-└── events/
-    └── 2026-06-10/
-        └── ...
+├── events
+│   └── date=2026-06-18
+│       └── hour=22
+│           └── 1781820712-6e7df24a-114e-46c0-8fc8-d01070eae668.ndjson.zst
+└── logs
+    └── date=2026-06-18
+        └── hour=22
+            └── 1781820714-f2966c24-8a82-42da-9c82-c8c995caf504.ndjson.zst
 
 openchami-logs-daily/
-├── logs/
-│   ├── 2026-06-10.parquet
-│   ├── 2026-06-11.parquet
-│   └── ...
-└── events/
-    ├── 2026-06-10.parquet
-    └── ...
+├── events
+│   └── date=2026-03-23
+│   │   └── fa34270d-1dc3-4981-921e-ad17b4b64dd1.parquet
+└── logs
+    └── date=2026-04-06
+        └── 4046851d-6872-490e-9ded-7a4ca459f4fc.parquet
 ```
 
-### Data Formats
-
-#### Raw Format (NDJSON)
+### Query Data Format
 
 **Syslog:**
 ```json
-{"ts":"2026-06-10T12:00:00Z","host":"node01","level":"INFO","msg":"Started"}
-{"ts":"2026-06-10T12:00:01Z","host":"node02","level":"ERROR","msg":"Failed"}
+{
+  "component_id": null,
+  "data": {...},
+  "date": "2026-06-10",
+  "host": "srv00",
+  "level": "info",
+  "msg": "<message content>",
+  "node_id": null,
+  "parse_error": null,
+  "payload_json": "{...}\n",
+  "request_id": null,
+  "request_uri": null,
+  "request_user": null,
+  "service": "versitygw",
+  "trace_id": null,
+  "ts": "2026-03-20T14:12:40Z",
+  "xname": ""
+}
 ```
 
 **CloudEvents:**
 ```json
-{"specversion":"1.0","type":"system.event","source":"/node01","time":"2026-06-10T12:00:00Z","data":{...}}
+{
+  "cloudevent": {
+    "data": {
+      "hello": "world",
+      "mode": "structured"
+    },
+    "datacontenttype": "application/json",
+    "id": "3a5e17ff-dadd-4efb-8c60-6f7bf83a7db7",
+    "source": "example/uri",
+    "specversion": "1.0",
+    "time": "2026-03-23T18:04:55.161504723Z",
+    "type": "org.openchami.cetester.dummy"
+  },
+  "cloudevent_binding": "structured",
+  "cloudevent_id": "3a5e17ff-dadd-4efb-8c60-6f7bf83a7db7",
+  "cloudevent_source": "example/uri",
+  "cloudevent_specversion": "1.0",
+  "cloudevent_type": "org.openchami.cetester.dummy",
+  "component_id": null,
+  "date": "2026-03-23",
+  "node_id": null,
+  "parse_error": null,
+  "payload_json": "{...}\n",
+  "raw": "{...}",
+  "request_id": null,
+  "request_uri": null,
+  "request_user": null,
+  "trace_id": null,
+  "transport_metadata": "{\"accept_encoding\":\"gzip\",\"content_length\":\"248\",\"content_type\":\"application/cloudevents+json\",\"host\":\"localhost:8910\",\"path\":\"/\",\"user_agent\":\"Go-http-client/1.1\"}",
+  "transport_method": "http",
+  "ts": "2026-06-06T18:04:55.162900372Z",
+  "xname": null
+}
 ```
-
-#### Compacted Format (Parquet)
-
-**Schema:**
-```
-ts: TIMESTAMP
-host: VARCHAR
-level: VARCHAR
-msg: VARCHAR
-data: JSON
-source: VARCHAR (cloudevents)
-type: VARCHAR (cloudevents)
-```
-
-**Advantages:**
-- Columnar format (only read needed columns)
-- Compressed (zstd compression)
-- Row group pruning (skip files/groups outside time range)
-- Metadata (min/max timestamps for partition pruning)
 
 ### IAM Model
 
@@ -342,6 +350,7 @@ Three IAM users with minimal permissions:
 
 **log-writer** (Collector):
 - `s3:PutObject` on raw bucket
+- `s3:ListBucket` on raw bucket
 
 **log-compactor** (Compactor):
 - `s3:GetObject`, `s3:ListBucket` on raw bucket
@@ -349,72 +358,7 @@ Three IAM users with minimal permissions:
 - `s3:DeleteObject` on raw bucket (post-compaction)
 
 **log-reader** (Query):
-- `s3:GetObject`, `s3:ListBucket` on compacted bucket
-
----
-
-## Query Architecture
-
-### DuckDB Integration
-
-**Why DuckDB:**
-- Embedded (no server process)
-- Native S3 support with HTTP range requests
-- Columnar engine optimized for analytics
-- Full SQL support (window functions, CTEs, etc.)
-- Apache Arrow integration
-
-**Query Execution:**
-
-```mermaid
-graph TD
-    A[SQL Query] --> B[Parse SQL]
-    B --> C[Replace SOURCES placeholder]
-    C --> D[DuckDB Query Plan]
-    D --> E{Partition Pruning}
-    E -->|ts filter| F[Select Parquet files]
-    F --> G{Column Pruning}
-    G -->|SELECT clause| H[Fetch row groups]
-    H --> I[Execute query]
-    I --> J[Return results]
-```
-
-### SOURCES Placeholder
-
-**User Query:**
-```sql
-SELECT * FROM SOURCES WHERE ts > '2026-06-10'
-```
-
-**Actual Query:**
-```sql
-SELECT * FROM read_parquet([
-  's3://openchami-logs-daily/logs/2026-06-10.parquet',
-  's3://openchami-logs-daily/logs/2026-06-11.parquet',
-  ...
-])
-WHERE ts > '2026-06-10'
-```
-
-**Scope Options:**
-- `--scope compacted`: Query Parquet files (default, fast)
-- `--scope raw`: Query NDJSON files (recent data)
-- `--scope all`: Query both (complete data)
-
-### Query Optimization
-
-**Partition Pruning:**
-- Files named by date (`2026-06-10.parquet`)
-- WHERE clause on `ts` filters files before reading
-- Parquet metadata (min/max `ts`) enables row group skipping
-
-**Column Pruning:**
-- Columnar format only reads selected columns
-- `SELECT ts, msg` reads 2 columns, not all
-
-**Predicate Pushdown:**
-- DuckDB pushes filters to Parquet reader
-- Filters applied during scan, not after
+- `s3:GetObject`, `s3:ListBucket` on both raw and compacted buckets
 
 ---
 
@@ -424,12 +368,12 @@ WHERE ts > '2026-06-10'
 
 **Pros:**
 - Industry standard (AWS, MinIO, VersityGW all compatible)
-- Cheap storage (~$0.02/GB/month)
+- Cheap storage
 - No operational overhead (managed service or simple self-hosted)
 - HTTP-based (works through firewalls)
 
 **Cons:**
-- Higher latency than local disk (50-100ms)
+- Higher latency than local disk
 - Request costs (mitigated by batching)
 
 **Decision:** Storage cost and simplicity outweigh latency concerns for log analytics.
@@ -470,7 +414,7 @@ WHERE ts > '2026-06-10'
 - Native S3 support
 - Full SQL support
 - Columnar engine (fast aggregations)
-- Small binary (~50MB)
+- Small binary
 - MIT license
 
 **Cons:**
@@ -494,7 +438,7 @@ WHERE ts > '2026-06-10'
 
 **Decision:** Operational simplicity (single binary) is critical for HPC deployments.
 
-### Why Vector/FluentBit?
+### Why Vector?
 
 **Decision:** Use existing, battle-tested collectors rather than building our own.
 
@@ -509,7 +453,6 @@ WHERE ts > '2026-06-10'
 ## Related Documentation
 
 - **[User Guide](USER_GUIDE.md)** - Query patterns and SQL examples
-- **[Operations Guide](OPERATIONS.md)** - Deployment and configuration
 - **[Developer Guide](DEVELOPMENT.md)** - Development setup
 
 ---
